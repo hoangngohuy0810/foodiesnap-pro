@@ -112,6 +112,33 @@ const PACKAGES = {
   ultra: { credits: 500, amount: 300000, label: 'Ultra' },
 };
 
+// 6b. Image Models & Credit Costs per image
+// NOTE: Only models that support responseModalities: ['IMAGE'] are valid.
+// Currently confirmed image generation models from Google Gemini API:
+//   - gemini-2.0-flash-preview-image-generation  (primary, best supported)
+//   - gemini-2.0-flash-exp                        (experimental, faster)
+const IMAGE_MODELS = {
+  'nano-banana': {
+    apiModel: 'gemini-2.5-flash-image',
+    label: 'Nano Banana',
+    creditCost: 0.5,
+    qualityBoost: false, // standard quality prompt
+  },
+  'nano-banana-2': {
+    apiModel: 'gemini-3.1-flash-image-preview',
+    label: 'Nano Banana 2',
+    creditCost: 1,
+    qualityBoost: false,
+  },
+  'nano-banana-pro': {
+    apiModel: 'gemini-3-pro-image-preview',
+    label: 'Nano Banana Pro',
+    creditCost: 2,
+    qualityBoost: true, // enhanced prompt for higher perceived quality
+  },
+};
+const DEFAULT_MODEL_ID = 'nano-banana-2';
+
 // 7. Auth Middleware - Verify Firebase ID Token
 async function verifyToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -153,22 +180,52 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     return res.status(403).json({ error: 'Tài khoản không tồn tại' });
   }
 
+  // Resolve model
+  const modelId = settings?.modelId && IMAGE_MODELS[settings.modelId]
+    ? settings.modelId
+    : DEFAULT_MODEL_ID;
+  const modelConfig = IMAGE_MODELS[modelId];
+  const creditCostPerImage = modelConfig.creditCost; // may be 0.5, 1, or 2
+  const totalCreditCost = creditCostPerImage * count;
+
+  console.log(`[Generate] model=${modelId} (${modelConfig.apiModel}), count=${count}, creditCost=${totalCreditCost}`);
+
   if (!isAdmin) {
     const currentCredits = userDoc.data()?.credits ?? 0;
-    if (currentCredits < count) {
+    if (currentCredits < totalCreditCost) {
       return res.status(402).json({
         error: 'Không đủ credits để tạo ảnh',
         credits: currentCredits,
-        required: count
+        required: totalCreditCost
       });
     }
     // Trừ credits ngay (optimistic deduction) - chỉ cho non-admin
+    // Use integer deduction via increment; for fractional costs store as-is
     await userRef.update({
-      credits: FieldValue.increment(-count)
+      credits: FieldValue.increment(-totalCreditCost)
     });
   }
 
-  const prompt = `
+  const isProModel = modelConfig.qualityBoost === true;
+
+  const prompt = isProModel
+    ? `
+    Tạo ảnh món ăn thương mại chất lượng siêu cao, đạt chuẩn tạp chí ẩm thực cao cấp.
+    Chủ thể: Món ăn trong ảnh được tải lên.
+    Phong cách: ${settings.style} - thực hiện với độ chính xác và chi tiết tối đa.
+    Ánh sáng: ${settings.lighting} - ánh sáng nhiều lớp, tạo chiều sâu và kịch tính.
+    Góc máy: ${settings.angle} - bố cục hoàn hảo, cân bằng thị giác tuyệt đối.
+    Nền: ${settings.backgroundPrompt || (bgBase64 ? "Hòa trộn hoàn hảo món ăn với nền, điều chỉnh phối cảnh, phản chiếu ánh sáng và bokeh." : "Bối cảnh sang trọng, chi tiết tinh tế, phù hợp với nhà hàng 5 sao.")}.
+
+    Yêu cầu chất lượng PREMIUM:
+    1. Tái tạo từng chi tiết kết cấu của món ăn: độ giòn, độ mịn, độ bóng, màu sắc tươi sáng hoàn hảo.
+    2. Ánh sáng studio cao cấp với highlight và shadow tinh tế, tạo cảm giác 3D.
+    3. ${bgBase64 ? "Hòa trộn liền mạch, chỉnh màu và ánh sáng để món ăn và nền là một tổng thể tự nhiên tuyệt đối." : "Nền bokeh mượt mà, gradient tự nhiên, tạo sự tương phản hoàn hảo với món ăn."}
+    4. Độ sâu trường ảnh chọn lọc, làm nổi bật điểm nhấn của món ăn.
+    5. Màu sắc sống động, bão hòa hợp lý, trông ngon miệng và hấp dẫn tột đỉnh.
+    6. Chất lượng ảnh đầu ra cực nét, không noise, đạt chuẩn in ấn thương mại.
+    `
+    : `
     Tăng cường chất lượng ảnh món ăn chuyên nghiệp.
     Chủ thể: Món ăn trong ảnh được tải lên.
     Phong cách: ${settings.style}.
@@ -182,7 +239,7 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     3. ${bgBase64 ? "Hòa trộn liền mạch món ăn vào nền được cung cấp. Điều chỉnh phối cảnh của món ăn để khớp với bề mặt của nền." : "Tạo một hình nền chân thực, chất lượng cao."}
     4. Đảm bảo ánh sáng chất lượng studio chuyên nghiệp và độ sâu trường ảnh.
     5. Xuất ra một bức ảnh món ăn thương mại, sắc nét.
-  `;
+    `;
 
   const cleanBase64 = (b64) => b64.includes(',') ? b64.split(',')[1] : b64;
 
@@ -211,7 +268,7 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
         try {
           const ai = new GoogleGenAI({ apiKey });
           const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-preview-image-generation',
+            model: modelConfig.apiModel,
             contents: [{ role: 'user', parts }],
             config: {
               responseModalities: ['IMAGE'],
@@ -294,10 +351,11 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
 
     // Hoàn trả credits nếu có ảnh thất bại (partial success) - chỉ cho non-admin
     const failedCount = count - results.length;
+    const refundCredits = failedCount * creditCostPerImage;
     if (!isAdmin && failedCount > 0) {
       try {
-        await userRef.update({ credits: FieldValue.increment(failedCount) });
-        console.log(`[Refund] Đã hoàn ${failedCount} credits cho user ${req.user.uid}`);
+        await userRef.update({ credits: FieldValue.increment(refundCredits) });
+        console.log(`[Refund] Đã hoàn ${refundCredits} credits cho user ${req.user.uid} (${failedCount} ảnh thất bại × ${creditCostPerImage} cr)`);
       } catch (e) {
         console.error('Lỗi khi hoàn trả credits:', e);
       }
@@ -305,15 +363,16 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
 
     res.json({
       results,
-      refunded: (!isAdmin && failedCount > 0) ? failedCount : 0,
+      refunded: (!isAdmin && failedCount > 0) ? refundCredits : 0,
     });
   } catch (error) {
     // Hoàn trả toàn bộ credits còn lại nếu generate thất bại - chỉ cho non-admin
-    const refundCount = count - results.length;
+    const failedOnError = count - results.length;
+    const refundOnError = failedOnError * creditCostPerImage;
     try {
-      if (!isAdmin && refundCount > 0) {
-        await userRef.update({ credits: FieldValue.increment(refundCount) });
-        console.log(`[Refund] Đã hoàn ${refundCount} credits cho user ${req.user.uid} do lỗi`);
+      if (!isAdmin && failedOnError > 0) {
+        await userRef.update({ credits: FieldValue.increment(refundOnError) });
+        console.log(`[Refund] Đã hoàn ${refundOnError} credits cho user ${req.user.uid} do lỗi`);
       }
     } catch (e) {
       console.error('Lỗi khi hoàn trả credits:', e);
@@ -321,7 +380,7 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     console.error("Lỗi Controller:", error);
     res.status(500).json({
       error: error.message || "Lỗi máy chủ nội bộ.",
-      refunded: (!isAdmin && refundCount > 0) ? refundCount : 0,
+      refunded: (!isAdmin && failedOnError > 0) ? refundOnError : 0,
     });
   }
 });

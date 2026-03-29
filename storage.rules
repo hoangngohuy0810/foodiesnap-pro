@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Admin check
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'ngohuyhoang1995@gmail.com';
+    }
+
+    // Example path: users/{userId}/filename
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+    }
+
+    // Default catch-all
+    match /{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

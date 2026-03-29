@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper check for admin
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'ngohuyhoang1995@gmail.com';
+    }
+
+    // Rules for User profiles
+    match /users/{userId} {
+      allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+    }
+
+    // Rules for Generations and Orders (documents having userId field)
+    match /{collection}/{docId} {
+      allow read, write: if isAdmin() || (
+        request.auth != null && (
+          (resource != null && resource.data.userId == request.auth.uid) ||
+          (resource == null && request.resource.data.userId == request.auth.uid)
+        )
+      );
+    }
+
+    // Default deny for anything else
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

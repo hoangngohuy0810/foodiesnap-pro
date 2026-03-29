@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Camera,
     Upload,
     Settings2,
     Sparkles,
@@ -10,16 +9,18 @@ import {
     Image as ImageIcon,
     Loader2,
     X,
-    Coins,
     ShoppingCart,
     User,
+    Zap,
+    Star,
+    Cpu,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cn, fileToBase64, downloadImage } from '../lib/utils';
-import { AspectRatio, ImageSize, GenerationSettings, GeneratedImage } from '../types';
+import { AspectRatio, ImageSize, GenerationSettings, GeneratedImage, ImageModelId, IMAGE_MODELS } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import OnboardingModal from '../components/OnboardingModal';
@@ -31,6 +32,26 @@ const ASPECT_RATIOS: AspectRatio[] = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 const SIZES: ImageSize[] = ['1K', '2K', '4K'];
 
 const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
+
+// Icon map for each model
+const MODEL_ICONS: Record<ImageModelId, React.ElementType> = {
+    'nano-banana': Zap,
+    'nano-banana-2': Cpu,
+    'nano-banana-pro': Star,
+};
+
+// Color map for each model
+const MODEL_COLORS: Record<ImageModelId, string> = {
+    'nano-banana': 'border-blue-400 bg-blue-50 text-blue-700',
+    'nano-banana-2': 'border-brand-orange bg-brand-orange/10 text-brand-orange',
+    'nano-banana-pro': 'border-purple-500 bg-purple-50 text-purple-700',
+};
+
+const MODEL_SELECTED_COLORS: Record<ImageModelId, string> = {
+    'nano-banana': 'border-blue-500 bg-blue-500 text-white',
+    'nano-banana-2': 'border-brand-orange bg-brand-orange text-white',
+    'nano-banana-pro': 'border-purple-600 bg-purple-600 text-white',
+};
 
 export default function AppPage() {
     const { user, userProfile, loading: authLoading, getIdToken } = useAuth();
@@ -50,26 +71,30 @@ export default function AppPage() {
         lighting: 'Ánh sáng tự nhiên',
         angle: 'Góc 45 độ (Cổ điển)',
         backgroundPrompt: '',
+        modelId: 'nano-banana-2',
     });
 
     const [isGenerating, setIsGenerating] = useState(false);
     const [results, setResults] = useState<GeneratedImage[]>([]);
+    const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
     // Onboarding
     const [showOnboarding, setShowOnboarding] = useState(false);
 
+    // Computed: selected model info & total cost
+    const selectedModel = IMAGE_MODELS.find(m => m.id === settings.modelId) ?? IMAGE_MODELS[1];
+    const totalCreditCost = selectedModel.creditCost * settings.count;
+
     useEffect(() => {
-        // Only show onboarding once: when profile is fully loaded AND onboardingCompleted is explicitly false
-        // Must check userProfile is loaded (not null) and field is strictly false (not undefined)
         if (
             user &&
             userProfile &&
             (userProfile as any).onboardingCompleted === false &&
-            !showOnboarding // avoid re-triggering if already shown
+            !showOnboarding
         ) {
             setShowOnboarding(true);
         }
-    }, [user, userProfile?.uid]); // only re-run when user or uid changes, NOT on every profile update
+    }, [user, userProfile?.uid]);
 
     const handleOnboardingClose = async () => {
         setShowOnboarding(false);
@@ -111,8 +136,8 @@ export default function AppPage() {
         }
 
         const credits = userProfile?.credits ?? 0;
-        if (!isAdmin && credits < settings.count) {
-            showToast(`Không đủ credits. Bạn có ${credits} credits, cần ${settings.count}.`, 'error');
+        if (!isAdmin && credits < totalCreditCost) {
+            showToast(`Không đủ credits. Bạn có ${credits} credits, cần ${totalCreditCost}.`, 'error');
             return;
         }
 
@@ -138,18 +163,15 @@ export default function AppPage() {
                 }),
             });
 
-            // Safely parse JSON – server may return empty body or HTML on certain errors
             let data: any = {};
             const contentType = response.headers.get('content-type') || '';
             if (contentType.includes('application/json')) {
                 try {
                     data = await response.json();
                 } catch {
-                    // JSON parse failed even though content-type said JSON
                     data = {};
                 }
             } else {
-                // Non-JSON response (HTML error page, empty body, rate-limit plain text, etc.)
                 const text = await response.text().catch(() => '');
                 if (text) console.error('Non-JSON server response:', text);
             }
@@ -160,15 +182,16 @@ export default function AppPage() {
             }
 
             if (!response.ok) {
-                // Auto-refund: server trả về refunded
                 if (data.refunded > 0) {
                     showToast(`⚠️ Lỗi tạo ảnh. Đã hoàn ${data.refunded} credit(s) về tài khoản của bạn.`, 'warning');
                 } else {
                     const statusMsg = response.status === 429
                         ? 'Quá nhiều yêu cầu. Vui lòng thử lại sau.'
-                        : response.status >= 500
-                            ? 'Lỗi máy chủ. Vui lòng thử lại sau.'
-                            : data.error || 'Lỗi server khi tạo ảnh.';
+                        : response.status === 404 || response.status === 502 || response.status === 504
+                            ? 'Không thể kết nối đến máy chủ Backend. Vui lòng đảm bảo đã chạy chạy lệnh "npm start" hoặc kiểm tra lại mạng.'
+                            : response.status >= 500
+                                ? 'Lỗi máy chủ (500). Vui lòng thử lại sau.'
+                                : data.error || 'Lỗi không xác định từ máy chủ khi tạo ảnh.';
                     throw new Error(statusMsg);
                 }
                 return;
@@ -176,7 +199,6 @@ export default function AppPage() {
 
             const newResults = data.results || [];
 
-            // Check if server refunded some credits (partial success)
             if (data.refunded && data.refunded > 0) {
                 showToast(`⚠️ Đã hoàn ${data.refunded} credit(s) do một số ảnh tạo thất bại.`, 'warning');
             }
@@ -223,7 +245,7 @@ export default function AppPage() {
             link.download = 'foodie-snaps.zip';
             link.click();
             URL.revokeObjectURL(url);
-        } catch (e) {
+        } catch {
             showToast('Không thể tải xuống tất cả ảnh cùng lúc do lỗi mạng.', 'error');
         }
     };
@@ -332,6 +354,69 @@ export default function AppPage() {
                             </h2>
 
                             <div className="space-y-4">
+
+                                {/* ── Model Selection ── */}
+                                <div>
+                                    <label className="text-xs font-mono uppercase text-gray-400 mb-2 block">
+                                        Model AI
+                                    </label>
+                                    <div className="space-y-2">
+                                        {IMAGE_MODELS.map(model => {
+                                            const Icon = MODEL_ICONS[model.id];
+                                            const isSelected = settings.modelId === model.id;
+                                            return (
+                                                <button
+                                                    key={model.id}
+                                                    onClick={() => setSettings({ ...settings, modelId: model.id })}
+                                                    className={cn(
+                                                        'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all text-left',
+                                                        isSelected
+                                                            ? MODEL_SELECTED_COLORS[model.id]
+                                                            : 'border-gray-100 bg-white hover:border-gray-200'
+                                                    )}
+                                                >
+                                                    <div className={cn(
+                                                        'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
+                                                        isSelected ? 'bg-white/20' : MODEL_COLORS[model.id]
+                                                    )}>
+                                                        <Icon size={15} />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs font-semibold truncate">{model.label}</span>
+                                                            {model.badge && (
+                                                                <span className={cn(
+                                                                    'text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0',
+                                                                    isSelected
+                                                                        ? 'bg-white/25 text-white'
+                                                                        : model.id === 'nano-banana-pro'
+                                                                            ? 'bg-purple-100 text-purple-700'
+                                                                            : 'bg-brand-orange/15 text-brand-orange'
+                                                                )}>
+                                                                    {model.badge}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className={cn(
+                                                            'text-[10px] truncate',
+                                                            isSelected ? 'text-white/80' : 'text-gray-400'
+                                                        )}>
+                                                            {model.description}
+                                                        </p>
+                                                    </div>
+                                                    <div className={cn(
+                                                        'text-xs font-bold shrink-0',
+                                                        isSelected ? 'text-white' : 'text-gray-500'
+                                                    )}>
+                                                        {model.creditCost === 0.5 ? '½' : model.creditCost} cr
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* ── Style ── */}
                                 <div>
                                     <label className="text-xs font-mono uppercase text-gray-400 mb-2 block">Phong cách hình ảnh</label>
                                     <div className="grid grid-cols-2 gap-2">
@@ -350,6 +435,7 @@ export default function AppPage() {
                                     </div>
                                 </div>
 
+                                {/* ── Lighting ── */}
                                 <div>
                                     <label className="text-xs font-mono uppercase text-gray-400 mb-2 block">Ánh sáng</label>
                                     <select
@@ -361,6 +447,7 @@ export default function AppPage() {
                                     </select>
                                 </div>
 
+                                {/* ── Angle ── */}
                                 <div>
                                     <label className="text-xs font-mono uppercase text-gray-400 mb-2 block">Góc máy</label>
                                     <select
@@ -372,6 +459,7 @@ export default function AppPage() {
                                     </select>
                                 </div>
 
+                                {/* ── Background Prompt ── */}
                                 <div>
                                     <label className="text-xs font-mono uppercase text-gray-400 mb-2 block">Mô tả nền</label>
                                     <textarea
@@ -382,6 +470,7 @@ export default function AppPage() {
                                     />
                                 </div>
 
+                                {/* ── Aspect ratio & Quality ── */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-xs font-mono uppercase text-gray-400 mb-2 block">Tỉ lệ khung hình</label>
@@ -405,6 +494,7 @@ export default function AppPage() {
                                     </div>
                                 </div>
 
+                                {/* ── Count ── */}
                                 <div>
                                     <label className="text-xs font-mono uppercase text-gray-400 mb-2 block">Số lượng ảnh: {settings.count}</label>
                                     <input
@@ -420,22 +510,33 @@ export default function AppPage() {
 
                             {/* Credits cost indicator */}
                             {user && (
-                                <div className="flex items-center justify-between text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2">
-                                    <span>
-                                        Chi phí: <span className="font-bold text-brand-orange">
-                                            {isAdmin ? 'Miễn phí' : `${settings.count} credit${settings.count > 1 ? 's' : ''}`}
-                                        </span>
-                                    </span>
-                                    {!isAdmin && (
+                                <div className="rounded-xl bg-gray-50 px-3 py-2.5 space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs text-gray-500">
                                         <span>
-                                            Số dư:{' '}
-                                            <span className={cn('font-bold', (userProfile?.credits ?? 0) < settings.count ? 'text-red-500' : 'text-green-600')}>
-                                                {userProfile?.credits ?? 0}
+                                            Chi phí:{' '}
+                                            <span className="font-bold text-brand-orange">
+                                                {isAdmin
+                                                    ? 'Miễn phí'
+                                                    : `${totalCreditCost % 1 === 0 ? totalCreditCost : totalCreditCost.toFixed(1)} credit${totalCreditCost > 1 ? 's' : ''}`
+                                                }
                                             </span>
                                         </span>
-                                    )}
-                                    {isAdmin && (
-                                        <span className="font-bold text-purple-600">👑 Admin</span>
+                                        {!isAdmin && (
+                                            <span>
+                                                Số dư:{' '}
+                                                <span className={cn('font-bold', (userProfile?.credits ?? 0) < totalCreditCost ? 'text-red-500' : 'text-green-600')}>
+                                                    {userProfile?.credits ?? 0}
+                                                </span>
+                                            </span>
+                                        )}
+                                        {isAdmin && (
+                                            <span className="font-bold text-purple-600">👑 Admin</span>
+                                        )}
+                                    </div>
+                                    {!isAdmin && settings.count > 1 && (
+                                        <p className="text-[10px] text-gray-400">
+                                            {selectedModel.creditCost === 0.5 ? '½' : selectedModel.creditCost} credit × {settings.count} ảnh = {totalCreditCost % 1 === 0 ? totalCreditCost : totalCreditCost.toFixed(1)} credits
+                                        </p>
                                     )}
                                 </div>
                             )}
@@ -455,7 +556,7 @@ export default function AppPage() {
                                         <User size={18} />
                                         Đăng nhập để tạo ảnh
                                     </>
-                                ) : (!isAdmin && (userProfile?.credits ?? 0) < settings.count) ? (
+                                ) : (!isAdmin && (userProfile?.credits ?? 0) < totalCreditCost) ? (
                                     <>
                                         <ShoppingCart size={18} />
                                         Mua credits để tiếp tục
@@ -527,44 +628,50 @@ export default function AppPage() {
                                             <p className="text-sm font-medium text-gray-500">Đang xử lý ảnh của bạn...</p>
                                         </motion.div>
                                     )}
-                                    {results.map((img) => (
-                                        <motion.div
-                                            key={img.id}
-                                            layout
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="group relative glass-card rounded-3xl overflow-hidden"
-                                        >
-                                            <img src={img.url} alt="Generated Food" className="w-full aspect-square object-cover" />
-                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                    {results.map((img) => {
+                                        const imgModel = IMAGE_MODELS.find(m => m.id === img.settings?.modelId);
+                                        return (
+                                            <motion.div
+                                                key={img.id}
+                                                layout
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                className="group relative glass-card rounded-3xl overflow-hidden cursor-pointer"
+                                                onClick={() => setEnlargedImage(img.url)}
+                                            >
+                                                <img src={img.url} alt="Generated Food" className="w-full aspect-square object-cover" />
+                                                
                                                 <button
-                                                    onClick={() => downloadImage(img.url, `foodie-snap-${img.id}.png`)}
-                                                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-brand-ink hover:bg-brand-orange hover:text-white transition-all"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        downloadImage(img.url, `foodie-snap-${img.id}.png`);
+                                                    }}
+                                                    className="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-md rounded-full shadow-lg flex items-center justify-center text-brand-ink opacity-0 group-hover:opacity-100 hover:bg-brand-orange hover:text-white hover:scale-105 transition-all outline-none"
                                                     title="Tải xuống"
                                                 >
-                                                    <Download size={20} />
+                                                    <Download size={18} />
                                                 </button>
-                                                <button
-                                                    onClick={() => window.open(img.url, '_blank')}
-                                                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-brand-ink hover:bg-brand-orange hover:text-white transition-all"
-                                                    title="Xem kích thước đầy đủ"
-                                                >
-                                                    <Maximize2 size={20} />
-                                                </button>
-                                            </div>
-                                            <div className="p-4 bg-white/90 backdrop-blur-sm flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-xs font-mono text-gray-400 uppercase">
-                                                        {img.settings.style} • {img.settings.aspectRatio}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500">{new Date(img.timestamp).toLocaleTimeString()}</p>
+                                                <div className="p-4 bg-white/90 backdrop-blur-sm flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-xs font-mono text-gray-400 uppercase">
+                                                            {img.settings.style} • {img.settings.aspectRatio}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">{new Date(img.timestamp).toLocaleTimeString()}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        {imgModel && (
+                                                            <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded text-[10px] font-semibold">
+                                                                {imgModel.label}
+                                                            </span>
+                                                        )}
+                                                        <div className="px-2 py-1 bg-brand-orange/10 text-brand-orange rounded text-[10px] font-bold uppercase tracking-tighter">
+                                                            {img.settings.imageSize}
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className="px-2 py-1 bg-brand-orange/10 text-brand-orange rounded text-[10px] font-bold uppercase tracking-tighter">
-                                                    {img.settings.imageSize}
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    ))}
+                                            </motion.div>
+                                        );
+                                    })}
                                 </AnimatePresence>
                             </div>
                         )}
@@ -573,7 +680,7 @@ export default function AppPage() {
 
                 {/* Footer */}
                 <footer className="max-w-7xl mx-auto px-6 mt-20 pt-8 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4 text-gray-400 text-xs">
-                    <p>© 2026 FoodieSnap Pro. Powered by Gemini 3.1 Flash Image.</p>
+                    <p>© 2026 FoodieSnap Pro. Powered by Gemini AI Image Generation.</p>
                     <div className="flex items-center gap-6">
                         <a href="/privacy-policy" className="hover:text-brand-orange transition-colors">Chính sách bảo mật</a>
                         <a href="/terms-of-service" className="hover:text-brand-orange transition-colors">Điều khoản dịch vụ</a>
@@ -581,6 +688,36 @@ export default function AppPage() {
                     </div>
                 </footer>
             </div>
+
+            {/* Enlarged Image Modal */}
+            <AnimatePresence>
+                {enlargedImage && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 sm:p-8"
+                        onClick={() => setEnlargedImage(null)}
+                    >
+                        <button
+                            onClick={() => setEnlargedImage(null)}
+                            className="absolute top-6 right-6 lg:top-10 lg:right-10 w-12 h-12 bg-white/10 hover:bg-brand-orange hover:text-white rounded-full flex items-center justify-center text-gray-300 transition-all backdrop-blur-md z-10"
+                        >
+                            <X size={24} />
+                        </button>
+                        <motion.img
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                            src={enlargedImage}
+                            alt="Enlarged Food"
+                            className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <OnboardingModal
                 open={showOnboarding}
