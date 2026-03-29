@@ -4,6 +4,3 @@ runConfig:
   concurrency: 80
   minInstances: 0
   maxInstances: 10
-env:
-  - variable: GEMINI_API_KEYS
-    secret: fd-gemini-api-keys
