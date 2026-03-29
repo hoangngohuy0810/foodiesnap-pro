@@ -4,3 +4,13 @@ runConfig:
   concurrency: 80
   minInstances: 0
   maxInstances: 10
+
+env:
+  - variable: GEMINI_API_KEYS
+    secret: GEMINI_API_KEYS
+  - variable: SEPAY_WEBHOOK_API_KEY
+    secret: SEPAY_WEBHOOK_API_KEY
+  - variable: SEPAY_BANK_ACCOUNT
+    secret: SEPAY_BANK_ACCOUNT
+  - variable: SEPAY_BANK_NAME
+    secret: SEPAY_BANK_NAME
