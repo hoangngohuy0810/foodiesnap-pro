@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!snap.exists() || data?.credits === undefined) {
       // Brand new user - set defaults including onboardingCompleted: false to trigger popup
       await setDoc(userRef, {
-        credits: 3,
+        credits: 4,
         totalGenerated: 0,
         onboardingCompleted: false,
         createdAt: serverTimestamp(),

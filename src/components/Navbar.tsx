@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Coins, User, LogOut, LayoutDashboard, Menu, X, Shield } from 'lucide-react';
+import { Camera, Coins, User, LogOut, LayoutDashboard, Menu, X, Shield, Tag } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import AuthModal from './AuthModal';
 import PricingModal from './PricingModal';
@@ -66,6 +66,18 @@ export default function Navbar() {
                             )}
                         >
                             Studio
+                        </Link>
+                        <Link
+                            to="/pricing"
+                            className={cn(
+                                'px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-1.5',
+                                location.pathname === '/pricing'
+                                    ? 'bg-brand-orange/10 text-brand-orange'
+                                    : 'text-gray-600 hover:bg-gray-100'
+                            )}
+                        >
+                            <Tag size={14} />
+                            Bảng giá
                         </Link>
                         {user && (
                             <Link
@@ -164,6 +176,17 @@ export default function Navbar() {
                         >
                             <Camera size={16} />
                             Studio
+                        </Link>
+                        <Link
+                            to="/pricing"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={cn(
+                                'flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium hover:bg-gray-50',
+                                location.pathname === '/pricing' ? 'text-brand-orange' : 'text-gray-700'
+                            )}
+                        >
+                            <Tag size={16} />
+                            Bảng giá
                         </Link>
                         {user && (
                             <Link

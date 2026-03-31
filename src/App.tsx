@@ -9,6 +9,7 @@ import AdminPage from './pages/AdminPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsPage from './pages/TermsPage';
 import RefundPolicyPage from './pages/RefundPolicyPage';
+import PricingPage from './pages/PricingPage';
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -37,6 +38,7 @@ export default function App() {
       <Route path="/app" element={<Layout><AppPage /></Layout>} />
       <Route path="/dashboard" element={<Layout><DashboardPage /></Layout>} />
       <Route path="/admin" element={<Layout><AdminPage /></Layout>} />
+      <Route path="/pricing" element={<Layout><PricingPage /></Layout>} />
 
       {/* Legal pages (no Navbar) */}
       <Route path="/privacy-policy" element={<LegalLayout><PrivacyPolicyPage /></LegalLayout>} />

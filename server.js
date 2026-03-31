@@ -105,36 +105,32 @@ function getNextApiKey() {
   return key;
 }
 
-// 6. Credit Packages
+// 6. Credit Packages  (1.000đ = 2 credits)
 const PACKAGES = {
-  starter: { credits: 50, amount: 50000, label: 'Starter' },
-  pro: { credits: 200, amount: 150000, label: 'Pro' },
-  ultra: { credits: 500, amount: 300000, label: 'Ultra' },
+  lite: { credits: 40, amount: 20000, label: 'Lite' },
+  personal: { credits: 220, amount: 99000, label: 'Cá Nhân' },
+  startup: { credits: 600, amount: 249000, label: 'Khởi Nghiệp' },
 };
 
-// 6b. Image Models & Credit Costs per image
-// NOTE: Only models that support responseModalities: ['IMAGE'] are valid.
-// Currently confirmed image generation models from Google Gemini API:
-//   - gemini-2.0-flash-preview-image-generation  (primary, best supported)
-//   - gemini-2.0-flash-exp                        (experimental, faster)
+// 6b. Image Models & Credit Costs per image  (doubled: 1.000đ = 2 credits)
 const IMAGE_MODELS = {
   'nano-banana': {
     apiModel: 'gemini-2.5-flash-image',
     label: 'Nano Banana',
-    creditCost: 0.5,
-    qualityBoost: false, // standard quality prompt
+    creditCost: 1,          // was 0.5
+    qualityBoost: false,
   },
   'nano-banana-2': {
     apiModel: 'gemini-3.1-flash-image-preview',
     label: 'Nano Banana 2',
-    creditCost: 1,
+    creditCost: 2,          // was 1
     qualityBoost: false,
   },
   'nano-banana-pro': {
     apiModel: 'gemini-3-pro-image-preview',
     label: 'Nano Banana Pro',
-    creditCost: 2,
-    qualityBoost: true, // enhanced prompt for higher perceived quality
+    creditCost: 4,          // was 2
+    qualityBoost: true,
   },
 };
 const DEFAULT_MODEL_ID = 'nano-banana-2';

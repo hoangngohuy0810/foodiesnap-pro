@@ -86,11 +86,11 @@ const STEPS = [
     { num: '04', icon: Download, title: 'Tải về & Dùng ngay', desc: 'Xuất ảnh chất lượng cao, sẵn sàng đăng ngay.' },
 ];
 
-const PKG_ICONS = { starter: Zap, pro: Star, ultra: Crown };
+const PKG_ICONS = { lite: Zap, personal: Star, startup: Crown };
 const PKG_COLORS = {
-    starter: 'text-blue-500 bg-blue-50',
-    pro: 'text-brand-orange bg-brand-orange/10',
-    ultra: 'text-purple-600 bg-purple-50',
+    lite: 'text-blue-500 bg-blue-50',
+    personal: 'text-brand-orange bg-brand-orange/10',
+    startup: 'text-purple-600 bg-purple-50',
 };
 
 export default function LandingPage() {
@@ -132,7 +132,7 @@ export default function LandingPage() {
                     <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                         <Link to="/app" className="btn-primary text-lg px-8 py-4 flex items-center gap-2 justify-center">
                             <Sparkles size={20} />
-                            Dùng thử miễn phí — 3 ảnh
+                            Dùng thử miễn phí — 4 credits
                         </Link>
                         <a
                             href="#pricing"
@@ -146,7 +146,7 @@ export default function LandingPage() {
                         <CheckCircle2 size={14} className="inline mr-1 text-green-500" />
                         Không cần thẻ tín dụng &nbsp;·&nbsp;
                         <CheckCircle2 size={14} className="inline mr-1 text-green-500" />
-                        3 ảnh miễn phí ngay khi đăng ký
+                        4 credits miễn phí khi đăng ký
                     </p>
                 </motion.div>
 
@@ -263,7 +263,7 @@ export default function LandingPage() {
                     {/* Free tier */}
                     <div className="mb-6 p-6 border-2 border-dashed border-green-200 rounded-3xl bg-green-50/50 text-center">
                         <p className="text-green-700 font-bold text-lg mb-1">🎁 Miễn phí khi đăng ký</p>
-                        <p className="text-green-600 text-sm">Tạo tài khoản và nhận ngay <strong>3 credits</strong> để trải nghiệm — không cần thẻ tín dụng!</p>
+                        <p className="text-green-600 text-sm">Tạo tài khoản và nhận ngay <strong>4 credits</strong> miễn phí để trải nghiệm — không cần thẻ tín dụng!</p>
                         <Link to="/app" className="mt-3 inline-flex items-center gap-2 bg-green-600 text-white px-5 py-2 rounded-full text-sm font-semibold hover:bg-green-700 transition-colors">
                             Bắt đầu miễn phí <ArrowRight size={14} />
                         </Link>
@@ -314,7 +314,7 @@ export default function LandingPage() {
                                             <CheckCircle2 size={14} className="text-green-500 shrink-0" />
                                             Hoàn tiền nếu lỗi
                                         </li>
-                                        {pkg.id !== 'starter' && (
+                                        {pkg.id !== 'lite' && (
                                             <li className="flex items-center gap-2 text-sm text-gray-600">
                                                 <CheckCircle2 size={14} className="text-green-500 shrink-0" />
                                                 Ưu tiên hỗ trợ
