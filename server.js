@@ -557,7 +557,330 @@ app.post('/api/webhook/sepay', webhookLimiter, async (req, res) => {
   res.json({ success: true });
 });
 
-// 12. Phục vụ Frontend Vite React sau khi build
+// ═══════════════════════════════════════════════════════════════════════════════
+// 12. BANNER GENERATION ENDPOINTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BANNER_MODEL = 'gemini-3-pro-image-preview';
+const BANNER_CREDIT_COST = 2;   // credits per banner generation
+const EDIT_CREDIT_COST = 1;     // credits per edit
+
+const BANNER_STYLES = [
+  'Sao chép chính xác',
+  'Hiện đại & Tối giản',
+  'Nổi bật & Sống động',
+  'Sang trọng & Thanh lịch',
+  'Sáng tạo phá cách',
+];
+
+const TYPO_PROMPT_MAP = {
+  'Tự động': 'Analyze the visual context and choose the most suitable font style automatically.',
+  'Làm đẹp, thời trang, mềm mại': 'TYPOGRAPHY STYLE: Elegant, Sophisticated, and Soft. Use high-contrast Serif fonts (like Didot, Bodoni) or thin, graceful Sans-Serif. The text should feel luxurious, feminine, and editorial fashion magazine style.',
+  'Cách điệu, dễ thương': 'TYPOGRAPHY STYLE: Stylized, Cute, and Playful. Use Handwritten, Script, or Rounded Sans-Serif fonts. Incorporate organic curves, decorative swashes, or doodle-like elements.',
+  'Tươi trẻ, màu sắc': 'TYPOGRAPHY STYLE: Youthful, Vibrant, and Colorful. Use Bold Bubble fonts, 3D text effects, or Pop-art inspired type. Dynamic, high-energy, potentially using gradients or multiple bright colors.',
+  'Chuyên nghiệp, hiện đại': 'TYPOGRAPHY STYLE: Professional, Corporate, and Clean. Use Geometric Sans-Serif fonts (like Helvetica, Futura, Roboto). Keep lines straight, balanced, and minimalist.',
+  'Hoài cổ (Retro/Vintage)': 'TYPOGRAPHY STYLE: Retro, Vintage, and Nostalgic. Use Cooper Black, slab serifs, or textured fonts reminiscent of the 70s, 80s, or 90s.',
+  'Mạnh mẽ, nổi bật': 'TYPOGRAPHY STYLE: Bold, Impactful, and Loud. Use Heavy/Black weight Sans-Serif fonts, All-Caps. High contrast against the background. Poster-style typography.',
+};
+
+const cleanBase64Banner = (b64) => b64.replace(/^data:(image\/\w+|application\/pdf);base64,/, '');
+const getMimeTypeBanner = (b64) => {
+  const match = b64.match(/^data:(.*);base64,/);
+  return match?.[1] || 'image/jpeg';
+};
+
+// Helper: call Gemini with retry/key rotation for banner
+async function callGeminiBanner(parts, aspectRatio, quality) {
+  const maxRetries = Math.min(apiKeys.length * 2, 5);
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const apiKey = getNextApiKey();
+    if (!apiKey) throw new Error('Chưa cấu hình GEMINI_API_KEYS trên server.');
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: BANNER_MODEL,
+        contents: { parts },
+        config: {
+          imageConfig: { aspectRatio: aspectRatio || '3:4', imageSize: quality || '1K' },
+        },
+      });
+
+      const candidates = response.candidates;
+      if (candidates && candidates.length > 0) {
+        for (const part of candidates[0].content.parts) {
+          if (part.inlineData && part.inlineData.data) {
+            return `data:image/png;base64,${part.inlineData.data}`;
+          }
+        }
+      }
+      throw new Error('Không có dữ liệu ảnh trả về từ Gemini API.');
+    } catch (err) {
+      lastError = err;
+      console.error(`[Banner] Lỗi với key ...${apiKey.slice(-4)}: ${err.message}`);
+      if (err.status === 429 || err.message?.includes('quota') || err.message?.includes('429')) {
+        continue; // Try next key
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error('Đã thử tất cả API keys nhưng đều thất bại.');
+}
+
+// 12a. POST /api/generate/banner — Clone mode
+app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) => {
+  const { referenceImages, productImages, brandDescription, promoInfo, userPrompt, settings } = req.body;
+
+  if (!referenceImages?.length || !productImages?.length) {
+    return res.status(400).json({ error: 'Thiếu ảnh tham khảo hoặc ảnh sản phẩm.' });
+  }
+
+  const quantity = Math.min(Math.max(parseInt(String(settings?.quantity)) || 1, 1), 5);
+  const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
+  const isAdmin = req.user.email === ADMIN_EMAIL;
+  const userRef = db.collection('users').doc(req.user.uid);
+  const userDoc = await userRef.get();
+  if (!userDoc.exists) return res.status(403).json({ error: 'Tài khoản không tồn tại' });
+
+  const totalCost = BANNER_CREDIT_COST * quantity;
+
+  if (!isAdmin) {
+    const currentCredits = userDoc.data()?.credits ?? 0;
+    if (currentCredits < totalCost) {
+      return res.status(402).json({
+        error: 'INSUFFICIENT_CREDITS',
+        creditsAvailable: currentCredits,
+        creditsRequired: totalCost,
+        message: `Bạn cần ${totalCost} credits để tạo ${quantity} banner. Hiện có ${currentCredits} credit.`,
+      });
+    }
+    await userRef.update({ credits: FieldValue.increment(-totalCost) });
+  }
+
+  const typoInstruction = TYPO_PROMPT_MAP[settings?.typography] || TYPO_PROMPT_MAP['Tự động'];
+
+  try {
+    const tasks = Array.from({ length: quantity }, (_, i) => {
+      const style = BANNER_STYLES[i % BANNER_STYLES.length];
+
+      const promptText = `
+    ROLE: expert AI Graphic Designer and Copywriter.
+    TASK: Create a high-converting, visually stunning advertising banner.
+
+    INPUTS:
+    1. Reference Images (First ${referenceImages.length} images): These define the visual style, layout composition, color grading, and general vibe.
+    2. Product Assets (Subsequent images): These are the hero objects to feature.
+
+    CORE DIRECTIVES:
+    1. STYLE ADAPTATION: Analyze the "vibe" of the reference images. Create a COMPLETELY NEW composition. Steal the "look and feel", not pixels. Ensure Product Assets are naturally integrated (match lighting, shadows, reflection, perspective).
+    2. INTELLIGENT COPYWRITING & TYPOGRAPHY:
+       - ${typoInstruction}
+       - ${promoInfo || brandDescription ? 'ADAPTIVE' : 'GENERATIVE'} text strategy.
+       - ${promoInfo ? `Use promo info: "${promoInfo}"` : ''}
+       - ${brandDescription ? `Brand context: "${brandDescription}"` : ''}
+       - Select only the most impactful keywords. Do not clutter. Ensure legibility and visual hierarchy.
+    3. COMPOSITION: Prioritize visual aesthetics. Negative space is key. Design Style: "${style}".
+       ${userPrompt ? `- User's Custom Wishlist: ${userPrompt}` : ''}
+
+    OUTPUT: A single, high-quality image containing the product and rendered text.
+      `;
+
+      const parts = [{ text: promptText }];
+      referenceImages.forEach((ref) => {
+        parts.push({ inlineData: { mimeType: getMimeTypeBanner(ref), data: cleanBase64Banner(ref) } });
+      });
+      productImages.forEach((prod) => {
+        parts.push({ inlineData: { mimeType: getMimeTypeBanner(prod), data: cleanBase64Banner(prod) } });
+      });
+
+      return callGeminiBanner(parts, settings?.aspectRatio, settings?.quality)
+        .then((base64) => ({ base64, style, success: true }))
+        .catch((err) => ({ error: err.message, style, success: false }));
+    });
+
+    const results = await Promise.all(tasks);
+    const successful = results.filter(r => r.success);
+    const failedCount = results.filter(r => !r.success).length;
+
+    // Refund failed
+    if (!isAdmin && failedCount > 0) {
+      const refund = failedCount * BANNER_CREDIT_COST;
+      await userRef.update({ credits: FieldValue.increment(refund) });
+      console.log(`[Banner Refund] Hoàn ${refund} credits cho ${req.user.uid}`);
+    }
+
+    console.log(`[Banner] Tạo ${successful.length}/${quantity} banner thành công.`);
+    res.json({
+      images: successful.map(r => ({ base64: r.base64, style: r.style })),
+      creditsUsed: (quantity - failedCount) * BANNER_CREDIT_COST,
+      ...(failedCount > 0 && { warning: `${failedCount}/${quantity} ảnh bị lỗi và đã được hoàn credit.` }),
+    });
+  } catch (err) {
+    // Full refund on catastrophic error
+    if (!isAdmin) {
+      try { await userRef.update({ credits: FieldValue.increment(totalCost) }); } catch { }
+    }
+    console.error('[Banner] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi server khi tạo banner.' });
+  }
+});
+
+// 12b. POST /api/generate/design — Design mode
+app.post('/api/generate/design', generateLimiter, verifyToken, async (req, res) => {
+  const { referenceImages, infoFiles, brandDescription, promoInfo, userPrompt, settings } = req.body;
+
+  if (!referenceImages?.length || !infoFiles?.length) {
+    return res.status(400).json({ error: 'Thiếu ảnh tham khảo hoặc file thông tin.' });
+  }
+
+  const quantity = Math.min(Math.max(parseInt(String(settings?.quantity)) || 1, 1), 5);
+  const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
+  const isAdmin = req.user.email === ADMIN_EMAIL;
+  const userRef = db.collection('users').doc(req.user.uid);
+  const userDoc = await userRef.get();
+  if (!userDoc.exists) return res.status(403).json({ error: 'Tài khoản không tồn tại' });
+
+  const totalCost = BANNER_CREDIT_COST * quantity;
+
+  if (!isAdmin) {
+    const currentCredits = userDoc.data()?.credits ?? 0;
+    if (currentCredits < totalCost) {
+      return res.status(402).json({
+        error: 'INSUFFICIENT_CREDITS',
+        creditsAvailable: currentCredits,
+        creditsRequired: totalCost,
+        message: `Bạn cần ${totalCost} credits để tạo ${quantity} banner. Hiện có ${currentCredits} credit.`,
+      });
+    }
+    await userRef.update({ credits: FieldValue.increment(-totalCost) });
+  }
+
+  const typoInstruction = TYPO_PROMPT_MAP[settings?.typography] || TYPO_PROMPT_MAP['Tự động'];
+
+  try {
+    const tasks = Array.from({ length: quantity }, (_, i) => {
+      const style = BANNER_STYLES[i % BANNER_STYLES.length];
+
+      const promptText = `
+    ROLE: Expert AI Graphic Designer.
+    TASK: Design a professional advertising banner by extracting content from an Information File and applying a specific Visual Style.
+
+    INPUTS:
+    1. Reference Images (First ${referenceImages.length} items): DEFINES THE VISUAL STYLE (Color palette, layout mood, font style, vibe).
+    2. Information Source (Subsequent items): Contains the RAW CONTENT (Program details, dates, prices, logos, or main subject).
+
+    CORE DIRECTIVES:
+    1. CONTENT EXTRACTION: READ the attached Information File thoroughly. Extract key details: Event Names, Dates, Prices, Headlines, Call to Actions. Combine with: "${brandDescription}" and "${promoInfo}". Prioritize the most important information.
+    2. VISUAL EXECUTION: IGNORE the *content* of the reference images, but STEAL their *style*. Apply the reference's color grading, lighting, and composition. Design Style: "${style}".
+    3. TYPOGRAPHY & LAYOUT:
+       - ${typoInstruction}
+       - Ensure text is legible. Create a balanced composition.
+       ${userPrompt ? `- User's Custom Wishlist: ${userPrompt}` : ''}
+
+    OUTPUT: A single, high-quality banner image that presents the extracted information in the requested style.
+      `;
+
+      const parts = [{ text: promptText }];
+      referenceImages.forEach((ref) => {
+        parts.push({ inlineData: { mimeType: getMimeTypeBanner(ref), data: cleanBase64Banner(ref) } });
+      });
+      infoFiles.forEach((file) => {
+        parts.push({ inlineData: { mimeType: getMimeTypeBanner(file), data: cleanBase64Banner(file) } });
+      });
+
+      return callGeminiBanner(parts, settings?.aspectRatio, settings?.quality)
+        .then((base64) => ({ base64, style, success: true }))
+        .catch((err) => ({ error: err.message, style, success: false }));
+    });
+
+    const results = await Promise.all(tasks);
+    const successful = results.filter(r => r.success);
+    const failedCount = results.filter(r => !r.success).length;
+
+    if (!isAdmin && failedCount > 0) {
+      const refund = failedCount * BANNER_CREDIT_COST;
+      await userRef.update({ credits: FieldValue.increment(refund) });
+    }
+
+    console.log(`[Design] Tạo ${successful.length}/${quantity} thiết kế thành công.`);
+    res.json({
+      images: successful.map(r => ({ base64: r.base64, style: r.style })),
+      creditsUsed: (quantity - failedCount) * BANNER_CREDIT_COST,
+      ...(failedCount > 0 && { warning: `${failedCount}/${quantity} ảnh bị lỗi và đã được hoàn credit.` }),
+    });
+  } catch (err) {
+    if (!isAdmin) {
+      try { await userRef.update({ credits: FieldValue.increment(totalCost) }); } catch { }
+    }
+    console.error('[Design] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi server khi tạo thiết kế.' });
+  }
+});
+
+// 12c. POST /api/generate/edit — Edit existing banner
+app.post('/api/generate/edit', generateLimiter, verifyToken, async (req, res) => {
+  const { currentImageBase64, editPrompt, aspectRatio } = req.body;
+
+  if (!currentImageBase64 || !editPrompt) {
+    return res.status(400).json({ error: 'Thiếu ảnh hoặc yêu cầu chỉnh sửa.' });
+  }
+
+  const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
+  const isAdmin = req.user.email === ADMIN_EMAIL;
+  const userRef = db.collection('users').doc(req.user.uid);
+  const userDoc = await userRef.get();
+  if (!userDoc.exists) return res.status(403).json({ error: 'Tài khoản không tồn tại' });
+
+  if (!isAdmin) {
+    const currentCredits = userDoc.data()?.credits ?? 0;
+    if (currentCredits < EDIT_CREDIT_COST) {
+      return res.status(402).json({
+        error: 'INSUFFICIENT_CREDITS',
+        creditsAvailable: currentCredits,
+        creditsRequired: EDIT_CREDIT_COST,
+        message: `Bạn cần ${EDIT_CREDIT_COST} credit để chỉnh sửa ảnh. Hiện có ${currentCredits} credit.`,
+      });
+    }
+    await userRef.update({ credits: FieldValue.increment(-EDIT_CREDIT_COST) });
+  }
+
+  try {
+    const promptText = `
+    TASK: Edit the provided image based on the user's instruction.
+    USER INSTRUCTION: "${editPrompt}"
+
+    DIRECTIVES:
+    - Maintain the overall high quality and resolution.
+    - Only modify the elements requested by the user.
+    - Ensure typography remains legible if touched.
+    - Return the full image.
+    `;
+
+    const parts = [
+      { text: promptText },
+      { inlineData: { mimeType: 'image/png', data: cleanBase64Banner(currentImageBase64) } },
+    ];
+
+    const base64 = await callGeminiBanner(parts, aspectRatio || '3:4', '1K');
+
+    console.log(`[Edit] Chỉnh sửa banner thành công cho ${req.user.uid}`);
+    res.json({
+      image: { base64 },
+      creditsUsed: EDIT_CREDIT_COST,
+    });
+  } catch (err) {
+    // Refund on failure
+    if (!isAdmin) {
+      try { await userRef.update({ credits: FieldValue.increment(EDIT_CREDIT_COST) }); } catch { }
+    }
+    console.error('[Edit] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi server khi chỉnh sửa ảnh. Credit đã được hoàn trả.' });
+  }
+});
+
+// 13. Phục vụ Frontend Vite React sau khi build
 app.use(express.static(path.join(__dirname, 'dist')));
 // SPA fallback - must be after API routes
 app.get('*', (_req, res) => {

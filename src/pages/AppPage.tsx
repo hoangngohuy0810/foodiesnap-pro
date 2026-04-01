@@ -1,25 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, X, UtensilsCrossed, LayoutTemplate } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { fileToBase64 } from '../lib/utils';
-import { GenerationSettings, GeneratedImage, IMAGE_MODELS, IMAGE_SIZE_MULTIPLIER } from '../types';
+import {
+    GenerationSettings, GeneratedImage, IMAGE_MODELS, IMAGE_SIZE_MULTIPLIER,
+    BannerGenerationSettings, BannerGeneratedImage, BannerGenerationState,
+    DEFAULT_BANNER_SETTINGS,
+} from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import OnboardingModal from '../components/OnboardingModal';
 
-// ── sub-components ────────────────────────────────────────────────────────────
+// ── Food sub-components ───────────────────────────────────────────────────────
 import UploadPanel, { SideDish } from '../components/app/UploadPanel';
 import SettingsPanel from '../components/app/SettingsPanel';
 import GenerationHistory from '../components/app/GenerationHistory';
+
+// ── Banner sub-components ─────────────────────────────────────────────────────
+import BannerUploadPanel from '../components/app/banner/BannerUploadPanel';
+import BannerSettingsPanel from '../components/app/banner/BannerSettingsPanel';
+import BannerGallery from '../components/app/banner/BannerGallery';
+
+// ── Services ──────────────────────────────────────────────────────────────────
+import { generateBanner, generateDesign, editBanner } from '../lib/bannerService';
+import { applyLogoToImage } from '../lib/imageUtils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
 
-const DEFAULT_SETTINGS: GenerationSettings = {
+type AppTab = 'food' | 'banner';
+
+const DEFAULT_FOOD_SETTINGS: GenerationSettings = {
     aspectRatio: '1:1',
     imageSize: '1K',
     count: 1,
@@ -37,27 +52,46 @@ export default function AppPage() {
     const { showToast } = useToast();
     const isAdmin = user?.email === ADMIN_EMAIL;
 
-    // ── upload state ──
+    // ── Tab state ──
+    const [activeTab, setActiveTab] = useState<AppTab>('food');
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // FOOD TAB STATE
+    // ══════════════════════════════════════════════════════════════════════════
     const [foodImage, setFoodImage] = useState<File | null>(null);
     const [foodPreview, setFoodPreview] = useState<string | null>(null);
     const [bgImage, setBgImage] = useState<File | null>(null);
     const [bgPreview, setBgPreview] = useState<string | null>(null);
     const [sideDishes, setSideDishes] = useState<SideDish[]>([]);
-
-    // ── generation state ──
-    const [settings, setSettings] = useState<GenerationSettings>(DEFAULT_SETTINGS);
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [foodSettings, setFoodSettings] = useState<GenerationSettings>(DEFAULT_FOOD_SETTINGS);
+    const [isFoodGenerating, setIsFoodGenerating] = useState(false);
     const [sessionImages, setSessionImages] = useState<GeneratedImage[]>([]);
     const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // BANNER TAB STATE
+    // ══════════════════════════════════════════════════════════════════════════
+    const [bannerSettings, setBannerSettings] = useState<BannerGenerationSettings>(DEFAULT_BANNER_SETTINGS);
+    const [referenceImages, setReferenceImages] = useState<string[]>([]);
+    const [productImages, setProductImages] = useState<string[]>([]);
+    const [infoFiles, setInfoFiles] = useState<string[]>([]);
+    const [brandDescription, setBrandDescription] = useState('');
+    const [promoInfo, setPromoInfo] = useState('');
+    const [bannerPrompt, setBannerPrompt] = useState('');
+    const [bannerState, setBannerState] = useState<BannerGenerationState>({
+        isGenerating: false,
+        error: null,
+        results: [],
+    });
 
     // ── onboarding ──
     const [showOnboarding, setShowOnboarding] = useState(false);
 
-    // ── derived ──
-    const selectedModel = IMAGE_MODELS.find(m => m.id === settings.modelId) ?? IMAGE_MODELS[1];
-    const sizeMultiplier = IMAGE_SIZE_MULTIPLIER[settings.imageSize] ?? 1;
+    // ── derived (food) ──
+    const selectedModel = IMAGE_MODELS.find(m => m.id === foodSettings.modelId) ?? IMAGE_MODELS[1];
+    const sizeMultiplier = IMAGE_SIZE_MULTIPLIER[foodSettings.imageSize] ?? 1;
     const costPerImage = selectedModel.creditCost * sizeMultiplier;
-    const totalCreditCost = costPerImage * settings.count;
+    const totalCreditCost = costPerImage * foodSettings.count;
     const credits = userProfile?.credits ?? 0;
 
     // ── effects ──
@@ -72,7 +106,38 @@ export default function AppPage() {
         }
     }, [user, userProfile?.uid]);
 
-    // ── handlers: upload ──
+    // Re-apply logo when banner logo settings change
+    useEffect(() => {
+        const reapplyLogos = async () => {
+            if (bannerState.results.length === 0) return;
+
+            const updatedResults = await Promise.all(
+                bannerState.results.map(async (img) => {
+                    if (!img.rawUrl) return img;
+                    let newUrl = img.rawUrl;
+                    if (bannerSettings.logo.image) {
+                        newUrl = await applyLogoToImage(img.rawUrl, bannerSettings.logo);
+                    }
+                    return { ...img, url: newUrl };
+                })
+            );
+
+            setBannerState(prev => {
+                if (prev.results.length !== updatedResults.length) return prev;
+                const mergedResults = prev.results.map((prevImg, i) => ({
+                    ...prevImg,
+                    url: updatedResults[i].url,
+                }));
+                return { ...prev, results: mergedResults };
+            });
+        };
+        reapplyLogos();
+    }, [bannerSettings.logo]);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // FOOD HANDLERS
+    // ══════════════════════════════════════════════════════════════════════════
+
     const handleFileChange = (
         e: React.ChangeEvent<HTMLInputElement>,
         type: 'food' | 'bg'
@@ -101,8 +166,7 @@ export default function AppPage() {
         }
     };
 
-    // ── handler: generate ──
-    const generateImages = async () => {
+    const generateFoodImages = async () => {
         if (!user) { showToast('Vui lòng đăng nhập để tạo ảnh.', 'warning'); return; }
         if (!foodImage) { showToast('Vui lòng tải ảnh món ăn lên trước.', 'warning'); return; }
         if (!isAdmin && credits < totalCreditCost) {
@@ -110,13 +174,12 @@ export default function AppPage() {
             return;
         }
 
-        setIsGenerating(true);
+        setIsFoodGenerating(true);
         try {
             const foodBase64 = await fileToBase64(foodImage);
             const bgBase64 = bgImage ? await fileToBase64(bgImage) : null;
             const token = await getIdToken();
 
-            // Encode side dishes to base64
             const sideDishesData = await Promise.all(
                 sideDishes.map(async (d) => ({
                     base64: await fileToBase64(d.file),
@@ -136,7 +199,7 @@ export default function AppPage() {
                     foodType: foodImage.type,
                     bgBase64,
                     bgType: bgImage?.type,
-                    settings,
+                    settings: foodSettings,
                     sideDishes: sideDishesData,
                 }),
             });
@@ -184,11 +247,10 @@ export default function AppPage() {
             console.error(err);
             showToast(err.message || 'Đã xảy ra lỗi trong quá trình tạo ảnh.', 'error');
         } finally {
-            setIsGenerating(false);
+            setIsFoodGenerating(false);
         }
     };
 
-    // ── handler: batch download ──
     const handleBatchDownload = async () => {
         if (sessionImages.length === 0) return;
         const { default: JSZip } = await import('jszip');
@@ -211,6 +273,118 @@ export default function AppPage() {
         }
     };
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // BANNER HANDLERS
+    // ══════════════════════════════════════════════════════════════════════════
+
+    const generateBannerImages = async () => {
+        if (!user) { showToast('Vui lòng đăng nhập để tạo banner.', 'warning'); return; }
+        if (referenceImages.length === 0) {
+            showToast('Vui lòng tải lên ít nhất một mẫu thiết kế tham khảo.', 'warning'); return;
+        }
+        if (bannerSettings.mode === 'clone' && productImages.length === 0) {
+            showToast('Chế độ Ghép sản phẩm yêu cầu tải lên ảnh sản phẩm.', 'warning'); return;
+        }
+        if (bannerSettings.mode === 'design' && infoFiles.length === 0) {
+            showToast('Chế độ Thiết kế AI yêu cầu tải lên file thông tin.', 'warning'); return;
+        }
+
+        setBannerState({ isGenerating: true, error: null, results: [] });
+
+        try {
+            const token = await getIdToken();
+            let images: { base64: string; style: string }[];
+
+            if (bannerSettings.mode === 'clone') {
+                images = await generateBanner(
+                    token, referenceImages, productImages,
+                    brandDescription, promoInfo, bannerPrompt, bannerSettings
+                );
+            } else {
+                images = await generateDesign(
+                    token, referenceImages, infoFiles,
+                    brandDescription, promoInfo, bannerPrompt, bannerSettings
+                );
+            }
+
+            const results: BannerGeneratedImage[] = await Promise.all(
+                images.map(async (img) => {
+                    const rawUrl = img.base64;
+                    let url = rawUrl;
+                    if (bannerSettings.logo.image) {
+                        url = await applyLogoToImage(rawUrl, bannerSettings.logo);
+                    }
+                    return {
+                        id: crypto.randomUUID(),
+                        url,
+                        rawUrl,
+                        style: img.style,
+                        aspectRatio: bannerSettings.aspectRatio,
+                    };
+                })
+            );
+
+            setBannerState({ isGenerating: false, error: null, results });
+            if (results.length > 0) {
+                confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#FF6321', '#6366f1', '#a855f7'] });
+                showToast(`✨ Đã tạo thành công ${results.length} banner!`, 'success');
+            }
+        } catch (err: any) {
+            console.error(err);
+            setBannerState(prev => ({ ...prev, isGenerating: false, error: err.message }));
+            showToast(err.message || 'Đã xảy ra lỗi khi tạo banner.', 'error');
+        }
+    };
+
+    const handleBannerRegenerate = async (id: string, editPromptText: string) => {
+        const imageIndex = bannerState.results.findIndex(img => img.id === id);
+        if (imageIndex === -1) return;
+
+        const currentImage = bannerState.results[imageIndex];
+
+        setBannerState(prev => {
+            const newResults = [...prev.results];
+            newResults[imageIndex] = { ...newResults[imageIndex], isRegenerating: true };
+            return { ...prev, results: newResults };
+        });
+
+        try {
+            const token = await getIdToken();
+            let newBase64 = await editBanner(token, currentImage.rawUrl, editPromptText, currentImage.aspectRatio);
+            const rawBase64 = newBase64;
+
+            if (bannerSettings.logo.image) {
+                newBase64 = await applyLogoToImage(newBase64, bannerSettings.logo);
+            }
+
+            setBannerState(prev => {
+                const newResults = [...prev.results];
+                newResults[imageIndex] = {
+                    ...newResults[imageIndex],
+                    url: newBase64,
+                    rawUrl: rawBase64,
+                    isRegenerating: false,
+                };
+                return { ...prev, results: newResults };
+            });
+            showToast('✨ Đã chỉnh sửa banner thành công!', 'success');
+        } catch (error: any) {
+            console.error('Banner edit failed:', error);
+            setBannerState(prev => {
+                const newResults = [...prev.results];
+                newResults[imageIndex] = { ...newResults[imageIndex], isRegenerating: false };
+                return { ...prev, results: newResults, error: error.message || 'Lỗi khi chỉnh sửa ảnh.' };
+            });
+            showToast(error.message || 'Lỗi khi chỉnh sửa banner.', 'error');
+        }
+    };
+
+    // ── banner canGenerate ──
+    const bannerCanGenerate = !!user && referenceImages.length > 0 && (
+        (bannerSettings.mode === 'clone' && productImages.length > 0) ||
+        (bannerSettings.mode === 'design' && infoFiles.length > 0)
+    );
+
     // ── loading guard ──
     if (authLoading) {
         return (
@@ -224,49 +398,122 @@ export default function AppPage() {
     return (
         <>
             <div className="min-h-screen pb-20">
-                <main className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <main className="max-w-7xl mx-auto px-4 py-6">
 
-                    {/* ── Left column: controls ── */}
-                    <div className="lg:col-span-4 space-y-4">
-                        <UploadPanel
-                            foodPreview={foodPreview}
-                            bgPreview={bgPreview}
-                            onFoodChange={(e) => handleFileChange(e, 'food')}
-                            onBgChange={(e) => handleFileChange(e, 'bg')}
-                            onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
-                            onBgClear={() => { setBgImage(null); setBgPreview(null); }}
-                            sideDishes={sideDishes}
-                            onSideDishesChange={setSideDishes}
-                        />
-
-                        <SettingsPanel
-                            settings={settings}
-                            onChange={setSettings}
-                            isGenerating={isGenerating}
-                            hasFoodImage={!!foodImage}
-                            isLoggedIn={!!user}
-                            isAdmin={isAdmin}
-                            credits={credits}
-                            costPerImage={costPerImage}
-                            sizeMultiplier={sizeMultiplier}
-                            totalCreditCost={totalCreditCost}
-                            onGenerate={generateImages}
-                        />
+                    {/* ══════ Tab Bar ══════ */}
+                    <div className="flex items-center gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+                        <button
+                            onClick={() => setActiveTab('food')}
+                            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${activeTab === 'food'
+                                ? 'bg-white text-brand-orange shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                        >
+                            <UtensilsCrossed size={16} />
+                            Món ăn
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('banner')}
+                            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${activeTab === 'banner'
+                                ? 'bg-white text-brand-orange shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                        >
+                            <LayoutTemplate size={16} />
+                            Banner
+                        </button>
                     </div>
 
-                    {/* ── Right column: history ── */}
-                    <div className="lg:col-span-8">
-                        <GenerationHistory
-                            sessionImages={sessionImages}
-                            isGenerating={isGenerating}
-                            pendingCount={settings.count}
-                            isLoggedIn={!!user}
-                            userId={user?.uid}
-                            onEnlarge={setEnlargedImage}
-                            onClearSession={() => setSessionImages([])}
-                            onBatchDownload={handleBatchDownload}
-                        />
-                    </div>
+                    {/* ══════ Food Tab Content ══════ */}
+                    {activeTab === 'food' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            {/* Left column: controls */}
+                            <div className="lg:col-span-4 space-y-4">
+                                <UploadPanel
+                                    foodPreview={foodPreview}
+                                    bgPreview={bgPreview}
+                                    onFoodChange={(e) => handleFileChange(e, 'food')}
+                                    onBgChange={(e) => handleFileChange(e, 'bg')}
+                                    onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
+                                    onBgClear={() => { setBgImage(null); setBgPreview(null); }}
+                                    sideDishes={sideDishes}
+                                    onSideDishesChange={setSideDishes}
+                                />
+
+                                <SettingsPanel
+                                    settings={foodSettings}
+                                    onChange={setFoodSettings}
+                                    isGenerating={isFoodGenerating}
+                                    hasFoodImage={!!foodImage}
+                                    isLoggedIn={!!user}
+                                    isAdmin={isAdmin}
+                                    credits={credits}
+                                    costPerImage={costPerImage}
+                                    sizeMultiplier={sizeMultiplier}
+                                    totalCreditCost={totalCreditCost}
+                                    onGenerate={generateFoodImages}
+                                />
+                            </div>
+
+                            {/* Right column: history */}
+                            <div className="lg:col-span-8">
+                                <GenerationHistory
+                                    sessionImages={sessionImages}
+                                    isGenerating={isFoodGenerating}
+                                    pendingCount={foodSettings.count}
+                                    isLoggedIn={!!user}
+                                    userId={user?.uid}
+                                    onEnlarge={setEnlargedImage}
+                                    onClearSession={() => setSessionImages([])}
+                                    onBatchDownload={handleBatchDownload}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ══════ Banner Tab Content ══════ */}
+                    {activeTab === 'banner' && (
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            {/* Left column: controls */}
+                            <div className="lg:col-span-4 space-y-4">
+                                <BannerUploadPanel
+                                    mode={bannerSettings.mode}
+                                    referenceImages={referenceImages}
+                                    onReferenceImagesChange={setReferenceImages}
+                                    productImages={productImages}
+                                    onProductImagesChange={setProductImages}
+                                    infoFiles={infoFiles}
+                                    onInfoFilesChange={setInfoFiles}
+                                    brandDescription={brandDescription}
+                                    onBrandDescriptionChange={setBrandDescription}
+                                    promoInfo={promoInfo}
+                                    onPromoInfoChange={setPromoInfo}
+                                    prompt={bannerPrompt}
+                                    onPromptChange={setBannerPrompt}
+                                />
+
+                                <BannerSettingsPanel
+                                    settings={bannerSettings}
+                                    onChange={setBannerSettings}
+                                    isGenerating={bannerState.isGenerating}
+                                    canGenerate={bannerCanGenerate}
+                                    isLoggedIn={!!user}
+                                    credits={credits}
+                                    onGenerate={generateBannerImages}
+                                />
+                            </div>
+
+                            {/* Right column: banner gallery */}
+                            <div className="lg:col-span-8">
+                                <BannerGallery
+                                    images={bannerState.results}
+                                    isGenerating={bannerState.isGenerating}
+                                    expectedCount={bannerSettings.quantity}
+                                    onRegenerate={handleBannerRegenerate}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </main>
 
                 {/* ── Footer ── */}
@@ -280,7 +527,7 @@ export default function AppPage() {
                 </footer>
             </div>
 
-            {/* ── Enlarged image modal ── */}
+            {/* ── Enlarged image modal (food tab) ── */}
             <AnimatePresence>
                 {enlargedImage && (
                     <motion.div
