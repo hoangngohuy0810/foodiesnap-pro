@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Camera, Coins, User, LogOut, LayoutDashboard, Menu, X, Shield, Tag } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,6 +29,20 @@ export default function Navbar() {
         setPricingModalOpen(false);
         setPaymentModalOpen(true);
     };
+
+    // Listen for custom event from PricingPage
+    useEffect(() => {
+        const handleOpenPayment = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            if (customEvent.detail) {
+                setCurrentOrder(customEvent.detail);
+                setPricingModalOpen(false);
+                setPaymentModalOpen(true);
+            }
+        };
+        window.addEventListener('open-payment', handleOpenPayment);
+        return () => window.removeEventListener('open-payment', handleOpenPayment);
+    }, []);
 
     const handlePaymentSuccess = () => {
         setPaymentModalOpen(false);

@@ -255,7 +255,7 @@ export default function SettingsPanel({
                             <AlertCircle size={11} className="text-red-500 mt-0.5 shrink-0" />
                             <p className="text-[10px] text-red-600 leading-tight">
                                 Thiếu <span className="font-bold">{fmtCr(shortfall)} credit{shortfall > 1 ? 's' : ''}</span>.{' '}
-                                <a href="/dashboard" className="underline font-semibold hover:text-red-700">
+                                <a href="/pricing" className="underline font-semibold hover:text-red-700">
                                     Mua thêm ngay →
                                 </a>
                             </p>

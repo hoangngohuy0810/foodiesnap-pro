@@ -158,7 +158,7 @@ async function verifyToken(req, res, next) {
 
 // 8. POST /api/generate - Tạo ảnh với kiểm tra credits
 app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
-  const { foodBase64, foodType, bgBase64, bgType, settings } = req.body;
+  const { foodBase64, foodType, bgBase64, bgType, settings, sideDishes } = req.body;
 
   // Input validation
   if (!foodBase64 || typeof foodBase64 !== 'string') {
@@ -212,6 +212,20 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
 
   const isProModel = modelConfig.qualityBoost === true;
 
+  // Build side dish prompt section
+  const validSideDishes = Array.isArray(sideDishes)
+    ? sideDishes.filter(d => d && typeof d.base64 === 'string')
+    : [];
+
+  const sideDishPromptSection = validSideDishes.length > 0
+    ? `\n\n    Các món phụ đi kèm (${validSideDishes.length} món):\n` +
+      validSideDishes.map((d, i) => {
+        const desc = d.description?.trim();
+        return `    - Món phụ ${i + 1}${desc ? `: ${desc}` : ''}`;
+      }).join('\n') +
+      `\n    QUAN TRỌNG: Đặt các món phụ này ở vị trí hỗ trợ (góc, cạnh, hoặc nền gần) để cân bằng bố cục. Chúng KHÔNG được chiếm spotlight của món chính - chỉ đóng vai trò đạo cụ và trang trí tôn vinh món chính.`
+    : '';
+
   const prompt = isProModel
     ? `
     Tạo ảnh món ăn thương mại chất lượng siêu cao, đạt chuẩn tạp chí ẩm thực cao cấp.
@@ -220,7 +234,7 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     Ánh sáng: ${settings.lighting} - ánh sáng nhiều lớp, tạo chiều sâu và kịch tính.
     Góc máy: ${settings.angle} - bố cục hoàn hảo, cân bằng thị giác tuyệt đối.
     Nền: ${settings.backgroundPrompt || (bgBase64 ? "Hòa trộn hoàn hảo món ăn với nền, điều chỉnh phối cảnh, phản chiếu ánh sáng và bokeh." : "Bối cảnh sang trọng, chi tiết tinh tế, phù hợp với nhà hàng 5 sao.")}.
-
+${sideDishPromptSection}
     Yêu cầu chất lượng PREMIUM:
     1. Tái tạo từng chi tiết kết cấu của món ăn: độ giòn, độ mịn, độ bóng, màu sắc tươi sáng hoàn hảo.
     2. Ánh sáng studio cao cấp với highlight và shadow tinh tế, tạo cảm giác 3D.
@@ -236,7 +250,7 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     Ánh sáng: ${settings.lighting}.
     Góc máy: ${settings.angle}.
     Nền: ${settings.backgroundPrompt || (bgBase64 ? "Sử dụng ảnh nền được cung cấp và hòa trộn món ăn vào đó một cách tự nhiên, điều chỉnh phối cảnh và ánh sáng cho chân thực." : "Một bối cảnh nhà hàng chuyên nghiệp làm nổi bật món ăn.")}.
-
+${sideDishPromptSection}
     Hướng dẫn:
     1. Tinh chỉnh vẻ ngoài của món ăn để trông hấp dẫn, tươi ngon và cao cấp hơn.
     2. Tăng cường màu sắc, kết cấu và vùng sáng.
@@ -254,6 +268,11 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
 
   if (bgBase64) {
     parts.push({ inlineData: { data: cleanBase64(bgBase64), mimeType: bgType || 'image/png' } });
+  }
+
+  // Append side dish images after background
+  for (const dish of validSideDishes) {
+    parts.push({ inlineData: { data: cleanBase64(dish.base64), mimeType: dish.mimeType || 'image/png' } });
   }
 
   const results = [];

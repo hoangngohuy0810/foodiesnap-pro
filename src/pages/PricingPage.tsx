@@ -74,12 +74,37 @@ export default function PricingPage() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [openFaq, setOpenFaq] = useState<number | null>(null);
+    const [loading, setLoading] = useState<string | null>(null);
 
-    const handleBuy = () => {
+    const handleBuy = async (packageId: string) => {
         if (!user) {
             navigate('/?signin=1');
-        } else {
-            navigate('/dashboard');
+            return;
+        }
+
+        setLoading(packageId);
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch('/api/orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ packageId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? 'Lỗi tạo đơn hàng');
+
+            // Pass the order data via state to the main app layout or open modal here
+            // The cleanest way is to redirect to /app with order details or trigger the Navbar payment modal
+            // Since Navbar handles the payment modal, we can dispatch a custom event
+            window.dispatchEvent(new CustomEvent('open-payment', { detail: data }));
+        } catch (error) {
+            console.error('Error creating order:', error);
+            alert('Có lỗi xảy ra khi tạo đơn hàng. Vui lòng thử lại sau.');
+        } finally {
+            setLoading(null);
         }
     };
 
@@ -170,16 +195,18 @@ export default function PricingPage() {
                                 </ul>
 
                                 <button
-                                    onClick={handleBuy}
+                                    onClick={() => handleBuy(pkg.id)}
+                                    disabled={loading === pkg.id}
                                     className={cn(
                                         'w-full py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2',
                                         isPopular
                                             ? 'bg-brand-orange text-white hover:bg-brand-orange/90'
-                                            : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-brand-orange hover:text-brand-orange'
+                                            : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-brand-orange hover:text-brand-orange',
+                                        loading === pkg.id && 'opacity-70 cursor-not-allowed'
                                     )}
                                 >
-                                    Mua ngay
-                                    <ChevronRight size={15} />
+                                    {loading === pkg.id ? 'Đang xử lý...' : 'Mua ngay'}
+                                    {!loading || loading !== pkg.id ? <ChevronRight size={15} /> : null}
                                 </button>
                             </motion.div>
                         );

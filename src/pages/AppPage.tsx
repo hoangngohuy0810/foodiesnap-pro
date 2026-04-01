@@ -11,7 +11,7 @@ import { useToast } from '../contexts/ToastContext';
 import OnboardingModal from '../components/OnboardingModal';
 
 // ── sub-components ────────────────────────────────────────────────────────────
-import UploadPanel from '../components/app/UploadPanel';
+import UploadPanel, { SideDish } from '../components/app/UploadPanel';
 import SettingsPanel from '../components/app/SettingsPanel';
 import GenerationHistory from '../components/app/GenerationHistory';
 
@@ -42,6 +42,7 @@ export default function AppPage() {
     const [foodPreview, setFoodPreview] = useState<string | null>(null);
     const [bgImage, setBgImage] = useState<File | null>(null);
     const [bgPreview, setBgPreview] = useState<string | null>(null);
+    const [sideDishes, setSideDishes] = useState<SideDish[]>([]);
 
     // ── generation state ──
     const [settings, setSettings] = useState<GenerationSettings>(DEFAULT_SETTINGS);
@@ -115,6 +116,15 @@ export default function AppPage() {
             const bgBase64 = bgImage ? await fileToBase64(bgImage) : null;
             const token = await getIdToken();
 
+            // Encode side dishes to base64
+            const sideDishesData = await Promise.all(
+                sideDishes.map(async (d) => ({
+                    base64: await fileToBase64(d.file),
+                    mimeType: d.file.type || 'image/png',
+                    description: d.description,
+                }))
+            );
+
             const response = await fetch('/api/generate', {
                 method: 'POST',
                 headers: {
@@ -127,6 +137,7 @@ export default function AppPage() {
                     bgBase64,
                     bgType: bgImage?.type,
                     settings,
+                    sideDishes: sideDishesData,
                 }),
             });
 
@@ -224,6 +235,8 @@ export default function AppPage() {
                             onBgChange={(e) => handleFileChange(e, 'bg')}
                             onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
                             onBgClear={() => { setBgImage(null); setBgPreview(null); }}
+                            sideDishes={sideDishes}
+                            onSideDishesChange={setSideDishes}
                         />
 
                         <SettingsPanel
