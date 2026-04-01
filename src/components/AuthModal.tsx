@@ -29,7 +29,8 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
       await signInWithGoogle();
       onClose();
     } catch (e: any) {
-      setError('Đăng nhập Google thất bại. Vui lòng thử lại.');
+      console.error('Google Auth Error:', e);
+      setError(`Đăng nhập Google thất bại: ${e?.code || e?.message || 'Lỗi không xác định'}`);
     } finally {
       setLoading(false);
     }
