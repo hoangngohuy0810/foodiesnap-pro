@@ -458,6 +458,17 @@ app.get('/api/orders/:orderId', verifyToken, async (req, res) => {
 
 // 11. POST /api/webhook/sepay - Nhận webhook từ Sepay khi có giao dịch vào
 app.post('/api/webhook/sepay', webhookLimiter, async (req, res) => {
+  // Lưu log để dễ debug
+  try {
+    await db.collection('webhook_logs').add({
+      timestamp: Date.now(),
+      body: req.body,
+      headers: req.headers
+    });
+  } catch (e) {
+    console.error('Lỗi lưu webhook_logs', e);
+  }
+
   // Xác thực API Key từ Sepay
   const authHeader = req.headers['authorization'] ?? '';
   const providedKey = authHeader.replace(/^(apikey|bearer)\s+/i, '').trim();
@@ -466,17 +477,31 @@ app.post('/api/webhook/sepay', webhookLimiter, async (req, res) => {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
-  const { id, transferAmount, transferType, content } = req.body;
+  // Trích xuất payload an toàn (cover các trường hợp data bị bọc trong array hoặc object data)
+  let payload = req.body;
+  if (Array.isArray(payload)) payload = payload[0];
+  if (payload && payload.data) {
+    payload = Array.isArray(payload.data) ? payload.data[0] : payload.data;
+  }
+
+  const id = payload?.id;
+  const transferAmount = payload?.transferAmount;
+  const transferType = payload?.transferType;
+  const content = payload?.content || payload?.transferContent || payload?.description || '';
 
   console.log(`[Webhook] Nhận giao dịch id=${id}, type=${transferType}, amount=${transferAmount}, content="${content}"`);
 
-  // Chỉ xử lý giao dịch tiền vào
-  if (transferType !== 'in') {
+  // Chỉ xử lý giao dịch tiền vào (hoặc nếu transferType không có sẵn thì mặc định cho qua để check content)
+  if (transferType && transferType !== 'in') {
     return res.json({ success: true });
   }
 
+  if (!id) {
+    console.warn('[Webhook] Không tìm thấy ID giao dịch trong payload');
+  }
+
   // Chống xử lý trùng lặp (dedup) bằng transaction ID của Sepay
-  const txRef = db.collection('sepay_transactions').doc(String(id));
+  const txRef = db.collection('sepay_transactions').doc(String(id || Date.now()));
   const txDoc = await txRef.get();
   if (txDoc.exists) {
     console.log(`[Webhook] Transaction ${id} đã được xử lý rồi, bỏ qua.`);
