@@ -14,27 +14,3 @@ env:
     secret: SEPAY_BANK_ACCOUNT
   - variable: SEPAY_BANK_NAME
     secret: SEPAY_BANK_NAME
-  - variable: VITE_FIREBASE_API_KEY
-    value: "AIzaSyA0qnRprJ6CQ3n1B06x-FR-R_kC3tVzfD4"
-    availability:
-      - BUILD
-  - variable: VITE_FIREBASE_AUTH_DOMAIN
-    value: "foodiesnap-pro.firebaseapp.com"
-    availability:
-      - BUILD
-  - variable: VITE_FIREBASE_PROJECT_ID
-    value: "foodiesnap-pro"
-    availability:
-      - BUILD
-  - variable: VITE_FIREBASE_STORAGE_BUCKET
-    value: "foodiesnap-pro.firebasestorage.app"
-    availability:
-      - BUILD
-  - variable: VITE_FIREBASE_MESSAGING_SENDER_ID
-    value: "214071158065"
-    availability:
-      - BUILD
-  - variable: VITE_FIREBASE_APP_ID
-    value: "1:214071158065:web:3d3f0fa5d7ff5e3ba9bc10"
-    availability:
-      - BUILD
