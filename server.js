@@ -55,10 +55,10 @@ app.use(cors({
   origin: (origin, callback) => {
     // Check if origin is allowed exactly, or if it's a dynamic Firebase domain
     if (
-      !origin || 
-      ALLOWED_ORIGINS.includes(origin) || 
-      origin.endsWith('.hosted.app') || 
-      origin.endsWith('.web.app') || 
+      !origin ||
+      ALLOWED_ORIGINS.includes(origin) ||
+      origin.endsWith('.hosted.app') ||
+      origin.endsWith('.web.app') ||
       origin.endsWith('.firebaseapp.com')
     ) {
       callback(null, true);
@@ -219,11 +219,11 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
 
   const sideDishPromptSection = validSideDishes.length > 0
     ? `\n\n    Các món phụ đi kèm (${validSideDishes.length} món):\n` +
-      validSideDishes.map((d, i) => {
-        const desc = d.description?.trim();
-        return `    - Món phụ ${i + 1}${desc ? `: ${desc}` : ''}`;
-      }).join('\n') +
-      `\n    QUAN TRỌNG: Đặt các món phụ này ở vị trí hỗ trợ (góc, cạnh, hoặc nền gần) để cân bằng bố cục. Chúng KHÔNG được chiếm spotlight của món chính - chỉ đóng vai trò đạo cụ và trang trí tôn vinh món chính.`
+    validSideDishes.map((d, i) => {
+      const desc = d.description?.trim();
+      return `    - Món phụ ${i + 1}${desc ? `: ${desc}` : ''}`;
+    }).join('\n') +
+    `\n    QUAN TRỌNG: Đặt các món phụ này ở vị trí hỗ trợ (góc, cạnh, hoặc nền gần) để cân bằng bố cục. Chúng KHÔNG được chiếm spotlight của món chính - chỉ đóng vai trò đạo cụ và trang trí tôn vinh món chính.`
     : '';
 
   const prompt = isProModel
@@ -460,15 +460,15 @@ app.get('/api/orders/:orderId', verifyToken, async (req, res) => {
 app.post('/api/webhook/sepay', webhookLimiter, async (req, res) => {
   // Xác thực API Key từ Sepay
   const authHeader = req.headers['authorization'] ?? '';
-  const providedKey = authHeader.startsWith('Apikey ') ? authHeader.slice(7) : authHeader;
+  const providedKey = authHeader.replace(/^(apikey|bearer)\s+/i, '').trim();
   if (!providedKey || providedKey !== process.env.SEPAY_WEBHOOK_API_KEY) {
     console.warn('[Webhook] API key không hợp lệ, từ chối request.');
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
 
-  const { id, transferAmount, transferType, transferContent } = req.body;
+  const { id, transferAmount, transferType, content } = req.body;
 
-  console.log(`[Webhook] Nhận giao dịch id=${id}, type=${transferType}, amount=${transferAmount}, content="${transferContent}"`);
+  console.log(`[Webhook] Nhận giao dịch id=${id}, type=${transferType}, amount=${transferAmount}, content="${content}"`);
 
   // Chỉ xử lý giao dịch tiền vào
   if (transferType !== 'in') {
@@ -484,9 +484,9 @@ app.post('/api/webhook/sepay', webhookLimiter, async (req, res) => {
   }
 
   // Trích xuất mã đơn hàng từ nội dung chuyển khoản (VD: "Thanh toan FSABCD1234 foodiesnap")
-  const match = (transferContent ?? '').match(/FS[A-F0-9]{8}/i);
+  const match = (content ?? '').match(/FS[A-F0-9]{8}/i);
   if (!match) {
-    console.log(`[Webhook] Không tìm thấy mã đơn hàng trong nội dung: "${transferContent}"`);
+    console.log(`[Webhook] Không tìm thấy mã đơn hàng trong nội dung: "${content}"`);
     return res.json({ success: true });
   }
   const orderCode = match[0].toUpperCase();
