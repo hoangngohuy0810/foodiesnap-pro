@@ -52,11 +52,18 @@ const ALLOWED_ORIGINS = [
 ];
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    // Check if origin is allowed exactly, or if it's a dynamic Firebase domain
+    if (
+      !origin || 
+      ALLOWED_ORIGINS.includes(origin) || 
+      origin.endsWith('.hosted.app') || 
+      origin.endsWith('.web.app') || 
+      origin.endsWith('.firebaseapp.com')
+    ) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // Return false instead of throwing new Error() to prevent Express 500 crash
+      callback(null, false);
     }
   },
   credentials: true,
