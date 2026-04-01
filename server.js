@@ -562,8 +562,9 @@ app.post('/api/webhook/sepay', webhookLimiter, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const BANNER_MODEL = 'gemini-3-pro-image-preview';
-const BANNER_CREDIT_COST = 2;   // credits per banner generation
-const EDIT_CREDIT_COST = 1;     // credits per edit
+const BANNER_BASE_CREDIT_COST = 2;   // base credits per banner at 1K
+const EDIT_CREDIT_COST = 1;          // credits per edit
+const BANNER_QUALITY_MULTIPLIER = { '1K': 1, '2K': 2, '4K': 3 };
 
 const BANNER_STYLES = [
   'Sao chép chính xác',
@@ -644,7 +645,9 @@ app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) 
   const userDoc = await userRef.get();
   if (!userDoc.exists) return res.status(403).json({ error: 'Tài khoản không tồn tại' });
 
-  const totalCost = BANNER_CREDIT_COST * quantity;
+  const qualityMul = BANNER_QUALITY_MULTIPLIER[settings?.quality] || 1;
+  const creditPerBanner = BANNER_BASE_CREDIT_COST * qualityMul;
+  const totalCost = creditPerBanner * quantity;
 
   if (!isAdmin) {
     const currentCredits = userDoc.data()?.credits ?? 0;
@@ -706,7 +709,7 @@ app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) 
 
     // Refund failed
     if (!isAdmin && failedCount > 0) {
-      const refund = failedCount * BANNER_CREDIT_COST;
+      const refund = failedCount * creditPerBanner;
       await userRef.update({ credits: FieldValue.increment(refund) });
       console.log(`[Banner Refund] Hoàn ${refund} credits cho ${req.user.uid}`);
     }
@@ -714,7 +717,7 @@ app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) 
     console.log(`[Banner] Tạo ${successful.length}/${quantity} banner thành công.`);
     res.json({
       images: successful.map(r => ({ base64: r.base64, style: r.style })),
-      creditsUsed: (quantity - failedCount) * BANNER_CREDIT_COST,
+      creditsUsed: (quantity - failedCount) * creditPerBanner,
       ...(failedCount > 0 && { warning: `${failedCount}/${quantity} ảnh bị lỗi và đã được hoàn credit.` }),
     });
   } catch (err) {
@@ -742,7 +745,9 @@ app.post('/api/generate/design', generateLimiter, verifyToken, async (req, res) 
   const userDoc = await userRef.get();
   if (!userDoc.exists) return res.status(403).json({ error: 'Tài khoản không tồn tại' });
 
-  const totalCost = BANNER_CREDIT_COST * quantity;
+  const qualityMulDesign = BANNER_QUALITY_MULTIPLIER[settings?.quality] || 1;
+  const creditPerDesign = BANNER_BASE_CREDIT_COST * qualityMulDesign;
+  const totalCost = creditPerDesign * quantity;
 
   if (!isAdmin) {
     const currentCredits = userDoc.data()?.credits ?? 0;
@@ -800,14 +805,14 @@ app.post('/api/generate/design', generateLimiter, verifyToken, async (req, res) 
     const failedCount = results.filter(r => !r.success).length;
 
     if (!isAdmin && failedCount > 0) {
-      const refund = failedCount * BANNER_CREDIT_COST;
+      const refund = failedCount * creditPerDesign;
       await userRef.update({ credits: FieldValue.increment(refund) });
     }
 
     console.log(`[Design] Tạo ${successful.length}/${quantity} thiết kế thành công.`);
     res.json({
       images: successful.map(r => ({ base64: r.base64, style: r.style })),
-      creditsUsed: (quantity - failedCount) * BANNER_CREDIT_COST,
+      creditsUsed: (quantity - failedCount) * creditPerDesign,
       ...(failedCount > 0 && { warning: `${failedCount}/${quantity} ảnh bị lỗi và đã được hoàn credit.` }),
     });
   } catch (err) {
