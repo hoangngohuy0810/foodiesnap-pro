@@ -41,6 +41,7 @@ const app = express();
 app.use(helmet({
   contentSecurityPolicy: false, // Disabled to allow Firebase Storage images
   crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false, // Disabled to allow Firebase Auth cross-origin popups
 }));
 
 // 3. CORS – allow only production domain + localhost dev
