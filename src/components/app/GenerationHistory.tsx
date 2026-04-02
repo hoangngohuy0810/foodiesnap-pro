@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     Download, Image as ImageIcon, Loader2, Trash2,
-    Clock, History, RefreshCw,
+    Clock, History, RefreshCw, UtensilsCrossed, LayoutTemplate,
 } from 'lucide-react';
 import {
     collection, query, where, limit, getDocs,
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { downloadImage } from '../../lib/utils';
-import { GeneratedImage, GenerationSettings, IMAGE_MODELS } from '../../types';
+import { GeneratedImage, GenerationSettings, IMAGE_MODELS, GenerationType } from '../../types';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +67,9 @@ interface FirestoreSession {
     timestamp: number;
     count: number;
     settings: GenerationSettings;
+    type?: GenerationType;
+    styles?: string[];
+    bannerTypography?: string;
 }
 
 function sessionToImages(session: FirestoreSession): GeneratedImage[] {
@@ -75,6 +78,9 @@ function sessionToImages(session: FirestoreSession): GeneratedImage[] {
         url,
         timestamp: session.timestamp,
         settings: session.settings,
+        type: session.type || 'food',
+        bannerStyle: session.styles?.[idx],
+        bannerTypography: session.bannerTypography,
     }));
 }
 
@@ -205,7 +211,7 @@ export default function GenerationHistory({
 
             {/* ── Empty state ── */}
             {isEmpty && (
-                <div className="h-[520px] border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 space-y-4">
+                <div className="h-[320px] border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 space-y-4">
                     <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center">
                         <ImageIcon size={40} />
                     </div>
@@ -213,7 +219,7 @@ export default function GenerationHistory({
                         <p className="font-medium">Chưa có ảnh nào được tạo</p>
                         <p className="text-sm">
                             {isLoggedIn
-                                ? 'Tải ảnh lên và nhấn "Nâng cấp ảnh" để bắt đầu'
+                                ? 'Tạo ảnh món ăn hoặc banner để bắt đầu'
                                 : 'Đăng nhập để bắt đầu tạo ảnh'}
                         </p>
                         {!isLoggedIn && (
@@ -289,9 +295,10 @@ export default function GenerationHistory({
                             <div className="grid grid-cols-2 gap-4">
                                 <AnimatePresence mode="popLayout">
                                     {images.map((img) => {
-                                        const imgModel = IMAGE_MODELS.find(
+                                        const isBanner = img.type === 'banner';
+                                        const imgModel = !isBanner ? IMAGE_MODELS.find(
                                             m => m.id === img.settings?.modelId
-                                        );
+                                        ) : null;
                                         return (
                                             <motion.div
                                                 key={img.id}
@@ -303,7 +310,7 @@ export default function GenerationHistory({
                                             >
                                                 <img
                                                     src={img.url}
-                                                    alt="Generated Food"
+                                                    alt={isBanner ? 'Banner' : 'Generated Food'}
                                                     className="w-full aspect-square object-cover"
                                                     loading="lazy"
                                                 />
@@ -312,7 +319,7 @@ export default function GenerationHistory({
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        downloadImage(img.url, `foodie-snap-${img.id}.png`);
+                                                        downloadImage(img.url, `${isBanner ? 'banner' : 'foodie-snap'}-${img.id}.png`);
                                                     }}
                                                     className="absolute top-3 right-3 w-9 h-9 bg-white/90 backdrop-blur-md rounded-full shadow-lg flex items-center justify-center text-brand-ink opacity-0 group-hover:opacity-100 hover:bg-brand-orange hover:text-white hover:scale-105 transition-all outline-none"
                                                     title="Tải xuống"
@@ -320,24 +327,54 @@ export default function GenerationHistory({
                                                     <Download size={15} />
                                                 </button>
 
+                                                {/* Type badge (top left) */}
+                                                <div className="absolute top-2.5 left-2.5">
+                                                    {isBanner ? (
+                                                        <span className="px-1.5 py-0.5 bg-purple-500/90 text-white rounded text-[8px] font-bold uppercase flex items-center gap-0.5 backdrop-blur-sm">
+                                                            <LayoutTemplate size={8} />
+                                                            Banner
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-1.5 py-0.5 bg-brand-orange/90 text-white rounded text-[8px] font-bold uppercase flex items-center gap-0.5 backdrop-blur-sm">
+                                                            <UtensilsCrossed size={8} />
+                                                            Món ăn
+                                                        </span>
+                                                    )}
+                                                </div>
+
                                                 {/* Info bar */}
                                                 <div className="px-3 py-2.5 bg-white/95 backdrop-blur-sm">
                                                     {/* Row 1 – style + badges */}
                                                     <div className="flex items-center justify-between gap-1 mb-1">
                                                         <p className="text-[10px] font-mono text-gray-500 truncate flex-1">
-                                                            {img.settings?.style ?? '—'}
+                                                            {isBanner
+                                                                ? (img.bannerStyle || '—')
+                                                                : (img.settings?.style ?? '—')
+                                                            }
                                                         </p>
                                                         <div className="flex items-center gap-1 shrink-0">
                                                             <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded text-[9px] font-bold">
                                                                 {img.settings?.aspectRatio ?? '—'}
                                                             </span>
-                                                            <span className="px-1.5 py-0.5 bg-brand-orange/10 text-brand-orange rounded text-[9px] font-bold uppercase">
-                                                                {img.settings?.imageSize ?? '—'}
-                                                            </span>
-                                                            {imgModel && (
-                                                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[9px] font-semibold">
-                                                                    {imgModel.label.replace('Nano Banana', 'NB')}
-                                                                </span>
+                                                            {isBanner ? (
+                                                                <>
+                                                                    {img.bannerTypography && img.bannerTypography !== 'Tự động' && (
+                                                                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[9px] font-bold truncate max-w-[80px]">
+                                                                            {img.bannerTypography}
+                                                                        </span>
+                                                                    )}
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span className="px-1.5 py-0.5 bg-brand-orange/10 text-brand-orange rounded text-[9px] font-bold uppercase">
+                                                                        {img.settings?.imageSize ?? '—'}
+                                                                    </span>
+                                                                    {imgModel && (
+                                                                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[9px] font-semibold">
+                                                                            {imgModel.label.replace('Nano Banana', 'NB')}
+                                                                        </span>
+                                                                    )}
+                                                                </>
                                                             )}
                                                         </div>
                                                     </div>

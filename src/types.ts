@@ -125,11 +125,19 @@ export interface GenerationSettings {
   modelId: ImageModelId;
 }
 
+export type GenerationType = 'food' | 'banner';
+
 export interface GeneratedImage {
   id: string;
   url: string;
   timestamp: number;
   settings: GenerationSettings;
+  /** Type of generation: food or banner */
+  type?: GenerationType;
+  /** Banner-specific: design style used */
+  bannerStyle?: string;
+  /** Banner-specific: typography style used */
+  bannerTypography?: string;
 }
 
 // ── Banner Types ──────────────────────────────────────────────────────────────

@@ -17,12 +17,14 @@ import OnboardingModal from '../components/OnboardingModal';
 // ── Food sub-components ───────────────────────────────────────────────────────
 import UploadPanel, { SideDish } from '../components/app/UploadPanel';
 import SettingsPanel from '../components/app/SettingsPanel';
-import GenerationHistory from '../components/app/GenerationHistory';
 
 // ── Banner sub-components ─────────────────────────────────────────────────────
 import BannerUploadPanel from '../components/app/banner/BannerUploadPanel';
 import BannerSettingsPanel from '../components/app/banner/BannerSettingsPanel';
 import BannerGallery from '../components/app/banner/BannerGallery';
+
+// ── Shared history ────────────────────────────────────────────────────────────
+import GenerationHistory from '../components/app/GenerationHistory';
 
 // ── Services ──────────────────────────────────────────────────────────────────
 import { generateBanner, generateDesign, editBanner } from '../lib/bannerService';
@@ -56,6 +58,12 @@ export default function AppPage() {
     const [activeTab, setActiveTab] = useState<AppTab>('food');
 
     // ══════════════════════════════════════════════════════════════════════════
+    // SHARED STATE — unified session images from both food & banner
+    // ══════════════════════════════════════════════════════════════════════════
+    const [sessionImages, setSessionImages] = useState<GeneratedImage[]>([]);
+    const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+
+    // ══════════════════════════════════════════════════════════════════════════
     // FOOD TAB STATE
     // ══════════════════════════════════════════════════════════════════════════
     const [foodImage, setFoodImage] = useState<File | null>(null);
@@ -65,8 +73,6 @@ export default function AppPage() {
     const [sideDishes, setSideDishes] = useState<SideDish[]>([]);
     const [foodSettings, setFoodSettings] = useState<GenerationSettings>(DEFAULT_FOOD_SETTINGS);
     const [isFoodGenerating, setIsFoodGenerating] = useState(false);
-    const [sessionImages, setSessionImages] = useState<GeneratedImage[]>([]);
-    const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
     // ══════════════════════════════════════════════════════════════════════════
     // BANNER TAB STATE
@@ -93,6 +99,10 @@ export default function AppPage() {
     const costPerImage = selectedModel.creditCost * sizeMultiplier;
     const totalCreditCost = costPerImage * foodSettings.count;
     const credits = userProfile?.credits ?? 0;
+
+    // ── derived: combined generating state for history skeleton ──
+    const isAnyGenerating = isFoodGenerating || bannerState.isGenerating;
+    const pendingCount = isFoodGenerating ? foodSettings.count : (bannerState.isGenerating ? bannerSettings.quantity : 0);
 
     // ── effects ──
     useEffect(() => {
@@ -235,7 +245,10 @@ export default function AppPage() {
                 showToast(`⚠️ Đã hoàn ${data.refunded} credit(s) do một số ảnh tạo thất bại.`, 'warning');
             }
 
-            const newResults: GeneratedImage[] = data.results ?? [];
+            const newResults: GeneratedImage[] = (data.results ?? []).map((r: any) => ({
+                ...r,
+                type: 'food' as const,
+            }));
             if (newResults.length > 0) {
                 setSessionImages(prev => [...newResults, ...prev]);
                 confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#FF6321', '#F5F2ED', '#1A1A1A'] });
@@ -260,13 +273,14 @@ export default function AppPage() {
                 sessionImages.map(async (img, idx) => {
                     const res = await fetch(img.url);
                     const blob = await res.blob();
-                    zip.file(`foodie-snap-${idx + 1}.png`, blob);
+                    const prefix = img.type === 'banner' ? 'banner' : 'foodie-snap';
+                    zip.file(`${prefix}-${idx + 1}.png`, blob);
                 })
             );
             const content = await zip.generateAsync({ type: 'blob' });
             const url = URL.createObjectURL(content);
             const a = document.createElement('a');
-            a.href = url; a.download = 'foodie-snaps.zip'; a.click();
+            a.href = url; a.download = 'foodiesnap-session.zip'; a.click();
             URL.revokeObjectURL(url);
         } catch {
             showToast('Không thể tải xuống tất cả ảnh cùng lúc do lỗi mạng.', 'error');
@@ -293,7 +307,7 @@ export default function AppPage() {
 
         try {
             const token = await getIdToken();
-            let images: { base64: string; style: string }[];
+            let images: { base64: string; style: string; url?: string }[];
 
             if (bannerSettings.mode === 'clone') {
                 images = await generateBanner(
@@ -307,7 +321,7 @@ export default function AppPage() {
                 );
             }
 
-            const results: BannerGeneratedImage[] = await Promise.all(
+            const bannerResults: BannerGeneratedImage[] = await Promise.all(
                 images.map(async (img) => {
                     const rawUrl = img.base64;
                     let url = rawUrl;
@@ -324,10 +338,26 @@ export default function AppPage() {
                 })
             );
 
-            setBannerState({ isGenerating: false, error: null, results });
-            if (results.length > 0) {
+            setBannerState({ isGenerating: false, error: null, results: bannerResults });
+
+            // Also add to unified session images (using the Storage URL if available)
+            if (bannerResults.length > 0) {
+                const historyImages: GeneratedImage[] = images.map((img, idx) => ({
+                    id: bannerResults[idx].id,
+                    url: (img as any).url || bannerResults[idx].url, // prefer Storage URL
+                    timestamp: Date.now(),
+                    settings: {
+                        aspectRatio: bannerSettings.aspectRatio,
+                        imageSize: bannerSettings.quality,
+                    } as any,
+                    type: 'banner' as const,
+                    bannerStyle: img.style,
+                    bannerTypography: bannerSettings.typography,
+                }));
+                setSessionImages(prev => [...historyImages, ...prev]);
+
                 confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#FF6321', '#6366f1', '#a855f7'] });
-                showToast(`✨ Đã tạo thành công ${results.length} banner!`, 'success');
+                showToast(`✨ Đã tạo thành công ${bannerResults.length} banner!`, 'success');
             }
         } catch (err: any) {
             console.error(err);
@@ -424,96 +454,94 @@ export default function AppPage() {
                         </button>
                     </div>
 
-                    {/* ══════ Food Tab Content ══════ */}
-                    {activeTab === 'food' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                            {/* Left column: controls */}
-                            <div className="lg:col-span-4 space-y-4">
-                                <UploadPanel
-                                    foodPreview={foodPreview}
-                                    bgPreview={bgPreview}
-                                    onFoodChange={(e) => handleFileChange(e, 'food')}
-                                    onBgChange={(e) => handleFileChange(e, 'bg')}
-                                    onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
-                                    onBgClear={() => { setBgImage(null); setBgPreview(null); }}
-                                    sideDishes={sideDishes}
-                                    onSideDishesChange={setSideDishes}
-                                />
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* ══════ Left column: Tab controls ══════ */}
+                        <div className="lg:col-span-4 space-y-4">
+                            {activeTab === 'food' && (
+                                <>
+                                    <UploadPanel
+                                        foodPreview={foodPreview}
+                                        bgPreview={bgPreview}
+                                        onFoodChange={(e) => handleFileChange(e, 'food')}
+                                        onBgChange={(e) => handleFileChange(e, 'bg')}
+                                        onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
+                                        onBgClear={() => { setBgImage(null); setBgPreview(null); }}
+                                        sideDishes={sideDishes}
+                                        onSideDishesChange={setSideDishes}
+                                    />
 
-                                <SettingsPanel
-                                    settings={foodSettings}
-                                    onChange={setFoodSettings}
-                                    isGenerating={isFoodGenerating}
-                                    hasFoodImage={!!foodImage}
-                                    isLoggedIn={!!user}
-                                    isAdmin={isAdmin}
-                                    credits={credits}
-                                    costPerImage={costPerImage}
-                                    sizeMultiplier={sizeMultiplier}
-                                    totalCreditCost={totalCreditCost}
-                                    onGenerate={generateFoodImages}
-                                />
-                            </div>
+                                    <SettingsPanel
+                                        settings={foodSettings}
+                                        onChange={setFoodSettings}
+                                        isGenerating={isFoodGenerating}
+                                        hasFoodImage={!!foodImage}
+                                        isLoggedIn={!!user}
+                                        isAdmin={isAdmin}
+                                        credits={credits}
+                                        costPerImage={costPerImage}
+                                        sizeMultiplier={sizeMultiplier}
+                                        totalCreditCost={totalCreditCost}
+                                        onGenerate={generateFoodImages}
+                                    />
+                                </>
+                            )}
 
-                            {/* Right column: history */}
-                            <div className="lg:col-span-8">
-                                <GenerationHistory
-                                    sessionImages={sessionImages}
-                                    isGenerating={isFoodGenerating}
-                                    pendingCount={foodSettings.count}
-                                    isLoggedIn={!!user}
-                                    userId={user?.uid}
-                                    onEnlarge={setEnlargedImage}
-                                    onClearSession={() => setSessionImages([])}
-                                    onBatchDownload={handleBatchDownload}
-                                />
-                            </div>
+                            {activeTab === 'banner' && (
+                                <>
+                                    <BannerUploadPanel
+                                        mode={bannerSettings.mode}
+                                        referenceImages={referenceImages}
+                                        onReferenceImagesChange={setReferenceImages}
+                                        productImages={productImages}
+                                        onProductImagesChange={setProductImages}
+                                        infoFiles={infoFiles}
+                                        onInfoFilesChange={setInfoFiles}
+                                        brandDescription={brandDescription}
+                                        onBrandDescriptionChange={setBrandDescription}
+                                        promoInfo={promoInfo}
+                                        onPromoInfoChange={setPromoInfo}
+                                        prompt={bannerPrompt}
+                                        onPromptChange={setBannerPrompt}
+                                    />
+
+                                    <BannerSettingsPanel
+                                        settings={bannerSettings}
+                                        onChange={setBannerSettings}
+                                        isGenerating={bannerState.isGenerating}
+                                        canGenerate={bannerCanGenerate}
+                                        isLoggedIn={!!user}
+                                        credits={credits}
+                                        onGenerate={generateBannerImages}
+                                    />
+                                </>
+                            )}
                         </div>
-                    )}
 
-                    {/* ══════ Banner Tab Content ══════ */}
-                    {activeTab === 'banner' && (
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                            {/* Left column: controls */}
-                            <div className="lg:col-span-4 space-y-4">
-                                <BannerUploadPanel
-                                    mode={bannerSettings.mode}
-                                    referenceImages={referenceImages}
-                                    onReferenceImagesChange={setReferenceImages}
-                                    productImages={productImages}
-                                    onProductImagesChange={setProductImages}
-                                    infoFiles={infoFiles}
-                                    onInfoFilesChange={setInfoFiles}
-                                    brandDescription={brandDescription}
-                                    onBrandDescriptionChange={setBrandDescription}
-                                    promoInfo={promoInfo}
-                                    onPromoInfoChange={setPromoInfo}
-                                    prompt={bannerPrompt}
-                                    onPromptChange={setBannerPrompt}
-                                />
-
-                                <BannerSettingsPanel
-                                    settings={bannerSettings}
-                                    onChange={setBannerSettings}
-                                    isGenerating={bannerState.isGenerating}
-                                    canGenerate={bannerCanGenerate}
-                                    isLoggedIn={!!user}
-                                    credits={credits}
-                                    onGenerate={generateBannerImages}
-                                />
-                            </div>
-
-                            {/* Right column: banner gallery */}
-                            <div className="lg:col-span-8">
+                        {/* ══════ Right column: Shared history + Banner current results ══════ */}
+                        <div className="lg:col-span-8 space-y-6">
+                            {/* Banner current results (only when banner tab active & has results) */}
+                            {activeTab === 'banner' && (bannerState.results.length > 0 || bannerState.isGenerating) && (
                                 <BannerGallery
                                     images={bannerState.results}
                                     isGenerating={bannerState.isGenerating}
                                     expectedCount={bannerSettings.quantity}
                                     onRegenerate={handleBannerRegenerate}
                                 />
-                            </div>
+                            )}
+
+                            {/* Shared Generation History — always visible */}
+                            <GenerationHistory
+                                sessionImages={sessionImages}
+                                isGenerating={isAnyGenerating}
+                                pendingCount={pendingCount}
+                                isLoggedIn={!!user}
+                                userId={user?.uid}
+                                onEnlarge={setEnlargedImage}
+                                onClearSession={() => setSessionImages([])}
+                                onBatchDownload={handleBatchDownload}
+                            />
                         </div>
-                    )}
+                    </div>
                 </main>
 
                 {/* ── Footer ── */}
@@ -527,7 +555,7 @@ export default function AppPage() {
                 </footer>
             </div>
 
-            {/* ── Enlarged image modal (food tab) ── */}
+            {/* ── Enlarged image modal ── */}
             <AnimatePresence>
                 {enlargedImage && (
                     <motion.div
@@ -549,7 +577,7 @@ export default function AppPage() {
                             exit={{ scale: 0.9, opacity: 0 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             src={enlargedImage}
-                            alt="Enlarged Food"
+                            alt="Enlarged"
                             className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl"
                             onClick={(e) => e.stopPropagation()}
                         />

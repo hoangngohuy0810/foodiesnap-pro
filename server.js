@@ -714,9 +714,52 @@ app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) 
       console.log(`[Banner Refund] Hoàn ${refund} credits cho ${req.user.uid}`);
     }
 
+    // Save successful banners to Firebase Storage + Firestore
+    const savedResults = [];
+    for (const r of successful) {
+      try {
+        const rawB64 = r.base64.replace(/^data:image\/\w+;base64,/, '');
+        const imgBuffer = Buffer.from(rawB64, 'base64');
+        const fileId = `users/${req.user.uid}/banners/${Date.now()}-${crypto.randomUUID().substring(0, 8)}.png`;
+        const file = bucket.file(fileId);
+        const storageToken = crypto.randomUUID();
+        await file.save(imgBuffer, {
+          metadata: { contentType: 'image/png', metadata: { firebaseStorageDownloadTokens: storageToken } }
+        });
+        const imgUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileId)}?alt=media&token=${storageToken}`;
+        savedResults.push({ url: imgUrl, style: r.style, base64: r.base64 });
+      } catch (e) {
+        console.error('[Banner] Error saving to storage:', e);
+        savedResults.push({ url: r.base64, style: r.style, base64: r.base64 }); // fallback to base64
+      }
+    }
+
+    // Save metadata to Firestore generations collection
+    if (savedResults.length > 0 && db) {
+      try {
+        await Promise.all([
+          db.collection('generations').add({
+            userId: req.user.uid,
+            timestamp: Date.now(),
+            count: savedResults.length,
+            type: 'banner',
+            bannerTypography: settings?.typography || 'Tự động',
+            settings: {
+              aspectRatio: settings?.aspectRatio || '3:4',
+              quality: settings?.quality || '1K',
+              mode: settings?.mode || 'clone',
+            },
+            styles: savedResults.map(r => r.style),
+            images: savedResults.map(r => r.url),
+          }),
+          userRef.update({ totalGenerated: FieldValue.increment(savedResults.length) }),
+        ]);
+      } catch (e) { console.error('[Banner] Firestore save error:', e); }
+    }
+
     console.log(`[Banner] Tạo ${successful.length}/${quantity} banner thành công.`);
     res.json({
-      images: successful.map(r => ({ base64: r.base64, style: r.style })),
+      images: savedResults.map(r => ({ base64: r.base64, style: r.style, url: r.url })),
       creditsUsed: (quantity - failedCount) * creditPerBanner,
       ...(failedCount > 0 && { warning: `${failedCount}/${quantity} ảnh bị lỗi và đã được hoàn credit.` }),
     });
@@ -809,9 +852,51 @@ app.post('/api/generate/design', generateLimiter, verifyToken, async (req, res) 
       await userRef.update({ credits: FieldValue.increment(refund) });
     }
 
+    // Save successful designs to Firebase Storage + Firestore
+    const savedDesigns = [];
+    for (const r of successful) {
+      try {
+        const rawB64 = r.base64.replace(/^data:image\/\w+;base64,/, '');
+        const imgBuffer = Buffer.from(rawB64, 'base64');
+        const fileId = `users/${req.user.uid}/banners/${Date.now()}-${crypto.randomUUID().substring(0, 8)}.png`;
+        const file = bucket.file(fileId);
+        const storageToken = crypto.randomUUID();
+        await file.save(imgBuffer, {
+          metadata: { contentType: 'image/png', metadata: { firebaseStorageDownloadTokens: storageToken } }
+        });
+        const imgUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileId)}?alt=media&token=${storageToken}`;
+        savedDesigns.push({ url: imgUrl, style: r.style, base64: r.base64 });
+      } catch (e) {
+        console.error('[Design] Error saving to storage:', e);
+        savedDesigns.push({ url: r.base64, style: r.style, base64: r.base64 });
+      }
+    }
+
+    if (savedDesigns.length > 0 && db) {
+      try {
+        await Promise.all([
+          db.collection('generations').add({
+            userId: req.user.uid,
+            timestamp: Date.now(),
+            count: savedDesigns.length,
+            type: 'banner',
+            bannerTypography: settings?.typography || 'Tự động',
+            settings: {
+              aspectRatio: settings?.aspectRatio || '3:4',
+              quality: settings?.quality || '1K',
+              mode: 'design',
+            },
+            styles: savedDesigns.map(r => r.style),
+            images: savedDesigns.map(r => r.url),
+          }),
+          userRef.update({ totalGenerated: FieldValue.increment(savedDesigns.length) }),
+        ]);
+      } catch (e) { console.error('[Design] Firestore save error:', e); }
+    }
+
     console.log(`[Design] Tạo ${successful.length}/${quantity} thiết kế thành công.`);
     res.json({
-      images: successful.map(r => ({ base64: r.base64, style: r.style })),
+      images: savedDesigns.map(r => ({ base64: r.base64, style: r.style, url: r.url })),
       creditsUsed: (quantity - failedCount) * creditPerDesign,
       ...(failedCount > 0 && { warning: `${failedCount}/${quantity} ảnh bị lỗi và đã được hoàn credit.` }),
     });
