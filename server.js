@@ -70,8 +70,16 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+// Handle payload too large errors
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Dung lượng dữ liệu tải lên quá lớn (tối đa 100MB). Vui lòng giảm kích thước hoặc số lượng ảnh.' });
+  }
+  next(err);
+});
 
 // 4. Rate limiting
 const generateLimiter = rateLimit({
@@ -120,24 +128,28 @@ const PACKAGES = {
   startup: { credits: 600, amount: 249000, label: 'Khởi Nghiệp' },
 };
 
-// 6b. Image Models & Credit Costs per image  (doubled: 1.000đ = 2 credits)
+// 6b. Image Models & Credit Costs per image
+// Tham chiếu: GEMINI_IMAGE_MODELS.md (nguồn: https://ai.google.dev/gemini-api/docs/image-generation)
 const IMAGE_MODELS = {
   'nano-banana': {
+    // Nano Banana: Gemini 2.5 Flash Image — speed & cost efficiency
     apiModel: 'gemini-2.5-flash-image',
     label: 'Nano Banana',
-    creditCost: 1,          // was 0.5
+    creditCost: 1,
     qualityBoost: false,
   },
   'nano-banana-2': {
+    // Nano Banana 2: Gemini 3.1 Flash Image Preview — balanced speed/quality (recommended)
     apiModel: 'gemini-3.1-flash-image-preview',
     label: 'Nano Banana 2',
-    creditCost: 2,          // was 1
+    creditCost: 2,
     qualityBoost: false,
   },
   'nano-banana-pro': {
+    // Nano Banana Pro: Gemini 3 Pro Image Preview — highest quality, professional grade
     apiModel: 'gemini-3-pro-image-preview',
     label: 'Nano Banana Pro',
-    creditCost: 4,          // was 2
+    creditCost: 4,
     qualityBoost: true,
   },
 };
@@ -294,11 +306,8 @@ ${sideDishPromptSection}
             model: modelConfig.apiModel,
             contents: [{ role: 'user', parts }],
             config: {
-              responseModalities: ['IMAGE'],
-              imageConfig: {
-                aspectRatio: settings.aspectRatio,
-                imageSize: settings.imageSize || '1K',
-              },
+              responseModalities: ['IMAGE', 'TEXT'],
+              temperature: 1.0,
             },
           });
 
@@ -561,6 +570,8 @@ app.post('/api/webhook/sepay', webhookLimiter, async (req, res) => {
 // 12. BANNER GENERATION ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Banner sử dụng model cao nhất: Nano Banana Pro (Gemini 3 Pro Image Preview)
+// Tham chiếu: GEMINI_IMAGE_MODELS.md (nguồn: https://ai.google.dev/gemini-api/docs/image-generation)
 const BANNER_MODEL = 'gemini-3-pro-image-preview';
 const BANNER_BASE_CREDIT_COST = 2;   // base credits per banner at 1K
 const EDIT_CREDIT_COST = 1;          // credits per edit
@@ -603,24 +614,52 @@ async function callGeminiBanner(parts, aspectRatio, quality) {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: BANNER_MODEL,
-        contents: { parts },
+        contents: [{ role: 'user', parts }],
         config: {
-          imageConfig: { aspectRatio: aspectRatio || '3:4', imageSize: quality || '1K' },
+          responseModalities: ['IMAGE', 'TEXT'],
+          temperature: 1.0,
         },
       });
 
+      console.log(`[Banner] Response candidates count: ${response.candidates?.length}`);
+
       const candidates = response.candidates;
       if (candidates && candidates.length > 0) {
-        for (const part of candidates[0].content.parts) {
+        const responseParts = candidates[0].content?.parts || [];
+        console.log(`[Banner] Response parts count: ${responseParts.length}, types: ${responseParts.map(p => p.inlineData ? 'image' : 'text').join(', ')}`);
+
+        for (const part of responseParts) {
           if (part.inlineData && part.inlineData.data) {
-            return `data:image/png;base64,${part.inlineData.data}`;
+            console.log(`[Banner] Found image data, mimeType: ${part.inlineData.mimeType}`);
+            const mimeType = part.inlineData.mimeType || 'image/png';
+            return `data:${mimeType};base64,${part.inlineData.data}`;
           }
         }
+
+        // Log finish reason if no image found
+        const finishReason = candidates[0].finishReason;
+        const safetyRatings = candidates[0].safetyRatings;
+        console.error(`[Banner] No image in response. finishReason: ${finishReason}`);
+        console.error(`[Banner] Safety ratings: ${JSON.stringify(safetyRatings)}`);
+
+        if (finishReason === 'IMAGE_SAFETY' || finishReason === 'SAFETY') {
+          throw new Error('Ảnh bị từ chối do chính sách nội dung của Gemini. Vui lòng thử lại với ảnh khác.');
+        }
       }
+
+      // Check promptFeedback for blocks
+      if (response.promptFeedback) {
+        console.error(`[Banner] Prompt feedback: ${JSON.stringify(response.promptFeedback)}`);
+        if (response.promptFeedback.blockReason) {
+          throw new Error(`Yêu cầu bị chặn: ${response.promptFeedback.blockReason}`);
+        }
+      }
+
       throw new Error('Không có dữ liệu ảnh trả về từ Gemini API.');
     } catch (err) {
       lastError = err;
       console.error(`[Banner] Lỗi với key ...${apiKey.slice(-4)}: ${err.message}`);
+      console.error(`  -> status: ${err.status}, code: ${err.code}`);
       if (err.status === 429 || err.message?.includes('quota') || err.message?.includes('429')) {
         continue; // Try next key
       }

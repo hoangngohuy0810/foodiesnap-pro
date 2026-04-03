@@ -1,0 +1,53 @@
+# FoodieSnap Pro — Development Rules
+
+## 🤖 GEMINI AI MODEL — BẮT BUỘC ĐỌC TRƯỚC KHI CODE
+
+Mỗi khi thêm tính năng mới có liên quan đến Gemini AI (tạo ảnh, banner, video, audio, etc.),
+**BẮT BUỘC** phải tham chiếu file `GEMINI_IMAGE_MODELS.md` trong thư mục gốc trước khi viết code.
+
+### Quy tắc chọn model:
+1. **KHÔNG được dùng** model bịa đặt hoặc không có trong tài liệu
+2. **KHÔNG được dùng** model thấp hơn `gemini-2.5-flash-image` cho tính năng thương mại
+3. **Luôn dùng model cao nhất phù hợp** với use case:
+   - Banner / Thiết kế thương mại → `gemini-3-pro-image-preview`
+   - Food photo balanced → `gemini-3.1-flash-image-preview`
+   - Quick/cheap generation → `gemini-2.5-flash-image`
+
+### Config bắt buộc cho `generateContent` (Gemini):
+```js
+config: {
+  responseModalities: ['IMAGE', 'TEXT'],  // BẮT BUỘC có cả TEXT
+  temperature: 1.0,
+  // TUYỆT ĐỐI KHÔNG dùng imageConfig — chỉ dành cho Imagen API
+}
+```
+
+### Contents format bắt buộc:
+```js
+contents: [{ role: 'user', parts: [...] }]  // PHẢI là Array
+// KHÔNG dùng: contents: { parts: [...] }   // SAI
+```
+
+### Khi nghi ngờ về model name → luôn đọc GEMINI_IMAGE_MODELS.md
+Nguồn gốc: https://ai.google.dev/gemini-api/docs/image-generation?hl=vi
+
+---
+
+## 📁 Cấu trúc project
+
+- `server.js` — Express backend + tất cả API endpoints
+- `src/` — React frontend (Vite + TypeScript)
+- `src/lib/bannerService.ts` — Client-side calls cho Banner API
+- `GEMINI_IMAGE_MODELS.md` — **Tài liệu tham chiếu model** (PHẢI đọc trước khi thêm model mới)
+
+## 🔐 Bảo mật
+
+- API keys chỉ được đặt trong `.env` (không commit)
+- Tất cả Gemini API calls đều đi qua server.js (không gọi trực tiếp từ frontend)
+- Xác thực bằng Firebase ID Token cho mọi `/api/*` endpoint
+
+## 💳 Credits
+
+- Hệ thống credits: 1.000đ = 2 credits
+- Luôn trừ credits trước khi gọi AI, hoàn trả nếu thất bại
+- Admin email (`ngohuyhoang1995@gmail.com`) được miễn credits
