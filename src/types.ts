@@ -1,3 +1,25 @@
+export interface BrandProfile {
+  shopName: string;
+  logo: string | null;
+  brandColors: string[];
+  description: string;
+  slogan: string;
+  address: string;
+  phone: string;
+  fanpage: string;
+}
+
+export const DEFAULT_BRAND_PROFILE: BrandProfile = {
+  shopName: '',
+  logo: null,
+  brandColors: ['#FF6321', '#FFFFFF', '#1A1A1A'],
+  description: '',
+  slogan: '',
+  address: '',
+  phone: '',
+  fanpage: '',
+};
+
 export interface UserProfile {
   uid: string;
   email: string;
@@ -5,6 +27,7 @@ export interface UserProfile {
   credits: number;
   totalGenerated: number;
   createdAt: number;
+  brandProfile?: BrandProfile;
 }
 
 export interface Order {

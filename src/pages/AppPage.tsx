@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, X, UtensilsCrossed, LayoutTemplate } from 'lucide-react';
+import { Loader2, X, UtensilsCrossed, LayoutTemplate, Zap, Settings2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -17,6 +17,10 @@ import OnboardingModal from '../components/OnboardingModal';
 // ── Food sub-components ───────────────────────────────────────────────────────
 import UploadPanel, { SideDish } from '../components/app/UploadPanel';
 import SettingsPanel from '../components/app/SettingsPanel';
+import QuickModePanel from '../components/app/QuickModePanel';
+
+// ── Brand Profile ─────────────────────────────────────────────────────────────
+import BrandProfilePanel from '../components/app/BrandProfilePanel';
 
 // ── Banner sub-components ─────────────────────────────────────────────────────
 import BannerUploadPanel from '../components/app/banner/BannerUploadPanel';
@@ -57,6 +61,24 @@ export default function AppPage() {
     // ── Tab state ──
     const [activeTab, setActiveTab] = useState<AppTab>('food');
 
+    // ── Quick Mode state (default: quick for new users, saved in localStorage) ──
+    const [isQuickMode, setIsQuickMode] = useState<boolean>(() => {
+        const saved = localStorage.getItem('foodiesnap-quick-mode');
+        return saved !== null ? saved === 'true' : true; // default: quick mode ON
+    });
+
+    const toggleQuickMode = (val: boolean) => {
+        setIsQuickMode(val);
+        localStorage.setItem('foodiesnap-quick-mode', String(val));
+    };
+
+    // Quick mode uses fixed optimal settings: nano-banana-2, 1 image, 1:1, 1K
+    const QUICK_SETTINGS: GenerationSettings = {
+        ...DEFAULT_FOOD_SETTINGS,
+        count: 1,
+    };
+    const quickCreditCost = (IMAGE_MODELS.find(m => m.id === QUICK_SETTINGS.modelId)?.creditCost ?? 2) * (IMAGE_SIZE_MULTIPLIER[QUICK_SETTINGS.imageSize] ?? 1);
+
     // ══════════════════════════════════════════════════════════════════════════
     // SHARED STATE — unified session images from both food & banner
     // ══════════════════════════════════════════════════════════════════════════
@@ -90,6 +112,9 @@ export default function AppPage() {
         results: [],
     });
 
+    // ── Brand Profile auto-fill tracking ──
+    const [brandProfileApplied, setBrandProfileApplied] = useState(false);
+
     // ── onboarding ──
     const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -102,9 +127,36 @@ export default function AppPage() {
 
     // ── derived: combined generating state for history skeleton ──
     const isAnyGenerating = isFoodGenerating || bannerState.isGenerating;
-    const pendingCount = isFoodGenerating ? foodSettings.count : (bannerState.isGenerating ? bannerSettings.quantity : 0);
+    const pendingCount = isFoodGenerating
+        ? (isQuickMode ? 1 : foodSettings.count)
+        : (bannerState.isGenerating ? bannerSettings.quantity : 0);
+
+    // ── Brand Profile ──
+    const brandProfile = userProfile?.brandProfile;
 
     // ── effects ──
+
+    // Auto-fill banner fields from Brand Profile when switching to banner tab
+    useEffect(() => {
+        if (activeTab === 'banner' && brandProfile && !brandProfileApplied) {
+            // Auto-fill brand description if empty
+            if (!brandDescription && brandProfile.description) {
+                const parts = [brandProfile.description];
+                if (brandProfile.slogan) parts.push(brandProfile.slogan);
+                if (brandProfile.shopName) parts.unshift(brandProfile.shopName);
+                setBrandDescription(parts.join(' — '));
+            }
+            // Auto-fill logo into banner settings if not already set
+            if (!bannerSettings.logo.image && brandProfile.logo) {
+                setBannerSettings(prev => ({
+                    ...prev,
+                    logo: { ...prev.logo, image: brandProfile.logo },
+                }));
+            }
+            setBrandProfileApplied(true);
+        }
+    }, [activeTab, brandProfile]);
+
     useEffect(() => {
         if (
             user &&
@@ -176,27 +228,31 @@ export default function AppPage() {
         }
     };
 
-    const generateFoodImages = async () => {
+    const generateFoodImages = async (useQuickSettings = false) => {
         if (!user) { showToast('Vui lòng đăng nhập để tạo ảnh.', 'warning'); return; }
         if (!foodImage) { showToast('Vui lòng tải ảnh món ăn lên trước.', 'warning'); return; }
-        if (!isAdmin && credits < totalCreditCost) {
-            showToast(`Không đủ credits. Bạn có ${credits} credits, cần ${totalCreditCost}.`, 'error');
+
+        const activeSettings = useQuickSettings ? QUICK_SETTINGS : foodSettings;
+        const activeCost = useQuickSettings ? quickCreditCost : totalCreditCost;
+
+        if (!isAdmin && credits < activeCost) {
+            showToast(`Không đủ credits. Bạn có ${credits} credits, cần ${activeCost}.`, 'error');
             return;
         }
 
         setIsFoodGenerating(true);
         try {
             const foodBase64 = await fileToBase64(foodImage);
-            const bgBase64 = bgImage ? await fileToBase64(bgImage) : null;
+            const bgBase64 = (!useQuickSettings && bgImage) ? await fileToBase64(bgImage) : null;
             const token = await getIdToken();
 
-            const sideDishesData = await Promise.all(
+            const sideDishesData = !useQuickSettings ? await Promise.all(
                 sideDishes.map(async (d) => ({
                     base64: await fileToBase64(d.file),
                     mimeType: d.file.type || 'image/png',
                     description: d.description,
                 }))
-            );
+            ) : [];
 
             const response = await fetch('/api/generate', {
                 method: 'POST',
@@ -209,7 +265,7 @@ export default function AppPage() {
                     foodType: foodImage.type,
                     bgBase64,
                     bgType: bgImage?.type,
-                    settings: foodSettings,
+                    settings: activeSettings,
                     sideDishes: sideDishesData,
                 }),
             });
@@ -457,37 +513,93 @@ export default function AppPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         {/* ══════ Left column: Tab controls ══════ */}
                         <div className="lg:col-span-4 space-y-4">
+                            {/* ── Brand Profile (visible on both tabs when logged in) ── */}
+                            {user && (
+                                <BrandProfilePanel
+                                    userId={user.uid}
+                                    brandProfile={brandProfile}
+                                />
+                            )}
+
                             {activeTab === 'food' && (
                                 <>
-                                    <UploadPanel
-                                        foodPreview={foodPreview}
-                                        bgPreview={bgPreview}
-                                        onFoodChange={(e) => handleFileChange(e, 'food')}
-                                        onBgChange={(e) => handleFileChange(e, 'bg')}
-                                        onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
-                                        onBgClear={() => { setBgImage(null); setBgPreview(null); }}
-                                        sideDishes={sideDishes}
-                                        onSideDishesChange={setSideDishes}
-                                    />
+                                    {/* ── Quick / Advanced Mode Toggle ── */}
+                                    <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg w-full">
+                                        <button
+                                            onClick={() => toggleQuickMode(true)}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-all ${isQuickMode
+                                                ? 'bg-white text-brand-orange shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            <Zap size={13} />
+                                            Nhanh
+                                        </button>
+                                        <button
+                                            onClick={() => toggleQuickMode(false)}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-all ${!isQuickMode
+                                                ? 'bg-white text-brand-orange shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            <Settings2 size={13} />
+                                            Chi tiết
+                                        </button>
+                                    </div>
 
-                                    <SettingsPanel
-                                        settings={foodSettings}
-                                        onChange={setFoodSettings}
-                                        isGenerating={isFoodGenerating}
-                                        hasFoodImage={!!foodImage}
-                                        isLoggedIn={!!user}
-                                        isAdmin={isAdmin}
-                                        credits={credits}
-                                        costPerImage={costPerImage}
-                                        sizeMultiplier={sizeMultiplier}
-                                        totalCreditCost={totalCreditCost}
-                                        onGenerate={generateFoodImages}
-                                    />
+                                    {isQuickMode ? (
+                                        <QuickModePanel
+                                            foodPreview={foodPreview}
+                                            onFoodChange={(e) => handleFileChange(e, 'food')}
+                                            onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
+                                            isGenerating={isFoodGenerating}
+                                            isLoggedIn={!!user}
+                                            credits={credits}
+                                            quickCreditCost={quickCreditCost}
+                                            onGenerate={() => generateFoodImages(true)}
+                                            onSwitchToAdvanced={() => toggleQuickMode(false)}
+                                        />
+                                    ) : (
+                                        <>
+                                            <UploadPanel
+                                                foodPreview={foodPreview}
+                                                bgPreview={bgPreview}
+                                                onFoodChange={(e) => handleFileChange(e, 'food')}
+                                                onBgChange={(e) => handleFileChange(e, 'bg')}
+                                                onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
+                                                onBgClear={() => { setBgImage(null); setBgPreview(null); }}
+                                                sideDishes={sideDishes}
+                                                onSideDishesChange={setSideDishes}
+                                            />
+
+                                            <SettingsPanel
+                                                settings={foodSettings}
+                                                onChange={setFoodSettings}
+                                                isGenerating={isFoodGenerating}
+                                                hasFoodImage={!!foodImage}
+                                                isLoggedIn={!!user}
+                                                isAdmin={isAdmin}
+                                                credits={credits}
+                                                costPerImage={costPerImage}
+                                                sizeMultiplier={sizeMultiplier}
+                                                totalCreditCost={totalCreditCost}
+                                                onGenerate={() => generateFoodImages(false)}
+                                            />
+                                        </>
+                                    )}
                                 </>
                             )}
 
                             {activeTab === 'banner' && (
                                 <>
+                                    {/* Auto-fill hint */}
+                                    {brandProfileApplied && brandProfile?.shopName && (
+                                        <div className="bg-green-50 border border-green-100 rounded-xl px-3 py-2 text-[10px] text-green-700 flex items-center gap-1.5">
+                                            <span>✓</span>
+                                            <span>Đã tự động điền từ hồ sơ <strong>{brandProfile.shopName}</strong></span>
+                                        </div>
+                                    )}
+
                                     <BannerUploadPanel
                                         mode={bannerSettings.mode}
                                         referenceImages={referenceImages}
