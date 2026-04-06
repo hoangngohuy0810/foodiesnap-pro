@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     Download, Image as ImageIcon, Loader2, Trash2,
-    Clock, History, RefreshCw, UtensilsCrossed, LayoutTemplate,
+    Clock, History, RefreshCw,
 } from 'lucide-react';
 import {
     collection, query, where, limit, getDocs,
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { downloadImage } from '../../lib/utils';
-import { GeneratedImage, GenerationSettings, IMAGE_MODELS, GenerationType } from '../../types';
+import { GeneratedImage, GenerationSettings, GenerationType } from '../../types';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -250,28 +250,17 @@ export default function GenerationHistory({
                                     </div>
                                     <div className="flex-1 h-px bg-gray-100" />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
                                     {Array.from({ length: pendingCount }).map((_, i) => (
                                         <motion.div
                                             key={i}
                                             initial={{ opacity: 0, scale: 0.95 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             transition={{ delay: i * 0.08 }}
-                                            className="glass-card rounded-2xl overflow-hidden"
+                                            className="glass-card rounded-lg overflow-hidden"
                                         >
-                                            <div className="aspect-square flex flex-col items-center justify-center space-y-3 bg-gray-50">
-                                                <Loader2 className="animate-spin text-brand-orange" size={32} />
-                                                <p className="text-xs text-gray-400">Đang xử lý...</p>
-                                            </div>
-                                            <div className="px-3 py-2.5 bg-white flex items-center justify-between gap-2">
-                                                <div className="space-y-1.5">
-                                                    <div className="h-2.5 w-24 bg-gray-100 rounded animate-pulse" />
-                                                    <div className="h-2 w-16 bg-gray-100 rounded animate-pulse" />
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <div className="h-5 w-10 bg-gray-100 rounded animate-pulse" />
-                                                    <div className="h-5 w-8 bg-gray-100 rounded animate-pulse" />
-                                                </div>
+                                            <div className="aspect-square flex flex-col items-center justify-center bg-gray-50">
+                                                <Loader2 className="animate-spin text-brand-orange" size={16} />
                                             </div>
                                         </motion.div>
                                     ))}
@@ -292,98 +281,43 @@ export default function GenerationHistory({
                                 <span className="text-[10px] text-gray-400">{images.length} ảnh</span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
                                 <AnimatePresence mode="popLayout">
                                     {images.map((img) => {
                                         const isBanner = img.type === 'banner';
-                                        const imgModel = !isBanner ? IMAGE_MODELS.find(
-                                            m => m.id === img.settings?.modelId
-                                        ) : null;
                                         return (
                                             <motion.div
                                                 key={img.id}
                                                 layout
-                                                initial={{ opacity: 0, y: 16 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                className="group relative glass-card rounded-2xl overflow-hidden cursor-pointer"
+                                                initial={{ opacity: 0, scale: 0.9 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                className="group relative rounded-lg overflow-hidden cursor-pointer bg-gray-100"
                                                 onClick={() => onEnlarge(img.url)}
+                                                title={isBanner ? (img.bannerStyle || 'Banner') : (img.settings?.style ?? '')}
                                             >
                                                 <img
                                                     src={img.url}
-                                                    alt={isBanner ? 'Banner' : 'Generated Food'}
+                                                    alt={isBanner ? 'Banner' : 'Food'}
                                                     className="w-full aspect-square object-cover"
                                                     loading="lazy"
                                                 />
 
-                                                {/* Download button */}
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        downloadImage(img.url, `${isBanner ? 'banner' : 'foodie-snap'}-${img.id}.png`);
-                                                    }}
-                                                    className="absolute top-3 right-3 w-9 h-9 bg-white/90 backdrop-blur-md rounded-full shadow-lg flex items-center justify-center text-brand-ink opacity-0 group-hover:opacity-100 hover:bg-brand-orange hover:text-white hover:scale-105 transition-all outline-none"
-                                                    title="Tải xuống"
-                                                >
-                                                    <Download size={15} />
-                                                </button>
-
-                                                {/* Type badge (top left) */}
-                                                <div className="absolute top-2.5 left-2.5">
-                                                    {isBanner ? (
-                                                        <span className="px-1.5 py-0.5 bg-purple-500/90 text-white rounded text-[8px] font-bold uppercase flex items-center gap-0.5 backdrop-blur-sm">
-                                                            <LayoutTemplate size={8} />
-                                                            Banner
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-1.5 py-0.5 bg-brand-orange/90 text-white rounded text-[8px] font-bold uppercase flex items-center gap-0.5 backdrop-blur-sm">
-                                                            <UtensilsCrossed size={8} />
-                                                            Món ăn
-                                                        </span>
-                                                    )}
+                                                {/* Hover overlay */}
+                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            downloadImage(img.url, `${isBanner ? 'banner' : 'foodie-snap'}-${img.id}.png`);
+                                                        }}
+                                                        className="w-6 h-6 bg-white/90 rounded-full flex items-center justify-center text-gray-700 opacity-0 group-hover:opacity-100 hover:bg-brand-orange hover:text-white transition-all"
+                                                        title="Tải xuống"
+                                                    >
+                                                        <Download size={10} />
+                                                    </button>
                                                 </div>
 
-                                                {/* Info bar */}
-                                                <div className="px-3 py-2.5 bg-white/95 backdrop-blur-sm">
-                                                    {/* Row 1 – style + badges */}
-                                                    <div className="flex items-center justify-between gap-1 mb-1">
-                                                        <p className="text-[10px] font-mono text-gray-500 truncate flex-1">
-                                                            {isBanner
-                                                                ? (img.bannerStyle || '—')
-                                                                : (img.settings?.style ?? '—')
-                                                            }
-                                                        </p>
-                                                        <div className="flex items-center gap-1 shrink-0">
-                                                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 rounded text-[9px] font-bold">
-                                                                {img.settings?.aspectRatio ?? '—'}
-                                                            </span>
-                                                            {isBanner ? (
-                                                                <>
-                                                                    {img.bannerTypography && img.bannerTypography !== 'Tự động' && (
-                                                                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[9px] font-bold truncate max-w-[80px]">
-                                                                            {img.bannerTypography}
-                                                                        </span>
-                                                                    )}
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <span className="px-1.5 py-0.5 bg-brand-orange/10 text-brand-orange rounded text-[9px] font-bold uppercase">
-                                                                        {img.settings?.imageSize ?? '—'}
-                                                                    </span>
-                                                                    {imgModel && (
-                                                                        <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-[9px] font-semibold">
-                                                                            {imgModel.label.replace('Nano Banana', 'NB')}
-                                                                        </span>
-                                                                    )}
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    {/* Row 2 – date */}
-                                                    <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                                                        <Clock size={9} />
-                                                        <span>{formatDateTime(img.timestamp)}</span>
-                                                    </div>
-                                                </div>
+                                                {/* Type dot */}
+                                                <div className={`absolute top-1 left-1 w-1.5 h-1.5 rounded-full ${isBanner ? 'bg-purple-500' : 'bg-brand-orange'}`} />
                                             </motion.div>
                                         );
                                     })}

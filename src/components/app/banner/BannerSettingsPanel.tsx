@@ -26,6 +26,7 @@ interface BannerSettingsPanelProps {
     isLoggedIn: boolean;
     credits: number;
     onGenerate: () => void;
+    brandProfileLogo?: string | null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ export default function BannerSettingsPanel({
     isLoggedIn,
     credits,
     onGenerate,
+    brandProfileLogo,
 }: BannerSettingsPanelProps) {
     const set = (patch: Partial<BannerGenerationSettings>) => onChange({ ...settings, ...patch });
 
@@ -153,6 +155,7 @@ export default function BannerSettingsPanel({
                         settings={settings.logo}
                         onChange={(logo) => set({ logo })}
                         aspectRatio={settings.aspectRatio}
+                        brandProfileLogo={brandProfileLogo}
                     />
                 </div>
             </details>

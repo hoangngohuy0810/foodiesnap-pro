@@ -32,7 +32,7 @@ import GenerationHistory from '../components/app/GenerationHistory';
 
 // ── Services ──────────────────────────────────────────────────────────────────
 import { generateBanner, generateDesign, editBanner } from '../lib/bannerService';
-import { applyLogoToImage } from '../lib/imageUtils';
+import { applyLogoToImage, cropToAspectRatio } from '../lib/imageUtils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -114,6 +114,8 @@ export default function AppPage() {
 
     // ── Brand Profile auto-fill tracking ──
     const [brandProfileApplied, setBrandProfileApplied] = useState(false);
+    // ── Track if user manually removed logo in banner session (don't re-auto-fill) ──
+    const [logoManuallyRemoved, setLogoManuallyRemoved] = useState(false);
 
     // ── onboarding ──
     const [showOnboarding, setShowOnboarding] = useState(false);
@@ -146,8 +148,8 @@ export default function AppPage() {
                 if (brandProfile.shopName) parts.unshift(brandProfile.shopName);
                 setBrandDescription(parts.join(' — '));
             }
-            // Auto-fill logo into banner settings if not already set
-            if (!bannerSettings.logo.image && brandProfile.logo) {
+            // Auto-fill logo only if user hasn't manually removed it this session
+            if (!bannerSettings.logo.image && brandProfile.logo && !logoManuallyRemoved) {
                 setBannerSettings(prev => ({
                     ...prev,
                     logo: { ...prev.logo, image: brandProfile.logo },
@@ -156,6 +158,20 @@ export default function AppPage() {
             setBrandProfileApplied(true);
         }
     }, [activeTab, brandProfile]);
+
+    // Interceptor: detect when user removes logo from banner settings (image goes null)
+    // to prevent re-auto-fill from brand profile
+    const handleBannerSettingsChange = (newSettings: BannerGenerationSettings) => {
+        // Detect manual logo removal: image was set, now becomes null
+        if (bannerSettings.logo.image && !newSettings.logo.image) {
+            setLogoManuallyRemoved(true);
+        }
+        // Detect manual logo upload: user added a new logo → reset removed flag
+        if (!bannerSettings.logo.image && newSettings.logo.image) {
+            setLogoManuallyRemoved(false);
+        }
+        setBannerSettings(newSettings);
+    };
 
     useEffect(() => {
         if (
@@ -379,7 +395,11 @@ export default function AppPage() {
 
             const bannerResults: BannerGeneratedImage[] = await Promise.all(
                 images.map(async (img) => {
-                    const rawUrl = img.base64;
+                    // Step 1: Crop to correct aspect ratio (Gemini doesn't support aspectRatio param)
+                    let rawUrl = img.base64;
+                    rawUrl = await cropToAspectRatio(rawUrl, bannerSettings.aspectRatio);
+
+                    // Step 2: Apply logo overlay (clamped inside bounds)
                     let url = rawUrl;
                     if (bannerSettings.logo.image) {
                         url = await applyLogoToImage(rawUrl, bannerSettings.logo);
@@ -437,6 +457,9 @@ export default function AppPage() {
         try {
             const token = await getIdToken();
             let newBase64 = await editBanner(token, currentImage.rawUrl, editPromptText, currentImage.aspectRatio);
+
+            // Crop to correct aspect ratio after edit
+            newBase64 = await cropToAspectRatio(newBase64, currentImage.aspectRatio);
             const rawBase64 = newBase64;
 
             if (bannerSettings.logo.image) {
@@ -618,12 +641,13 @@ export default function AppPage() {
 
                                     <BannerSettingsPanel
                                         settings={bannerSettings}
-                                        onChange={setBannerSettings}
+                                        onChange={handleBannerSettingsChange}
                                         isGenerating={bannerState.isGenerating}
                                         canGenerate={bannerCanGenerate}
                                         isLoggedIn={!!user}
                                         credits={credits}
                                         onGenerate={generateBannerImages}
+                                        brandProfileLogo={brandProfile?.logo ?? null}
                                     />
                                 </>
                             )}

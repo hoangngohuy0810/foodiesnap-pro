@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     Store, Save, Check, ChevronDown, ChevronUp, Image as ImageIcon,
-    X, MapPin, Phone, Globe, Palette, Loader2,
+    MapPin, Phone, Globe, Palette, Loader2, Plus, X, Pipette,
 } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -14,25 +14,73 @@ interface BrandProfilePanelProps {
     brandProfile: BrandProfile | undefined;
 }
 
-const COLOR_PRESETS = [
-    '#FF6321', '#E53E3E', '#DD6B20', '#D69E2E',
-    '#38A169', '#3182CE', '#805AD5', '#D53F8C',
-    '#1A1A1A', '#4A5568', '#FFFFFF', '#F7FAFC',
-];
+// ── Extract dominant colors from an image using Canvas ────────────────────────
+async function extractColorsFromImage(dataUrl: string, count: number = 3): Promise<string[]> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const size = 64; // sample at small size for speed
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { resolve([]); return; }
+            ctx.drawImage(img, 0, 0, size, size);
+            const data = ctx.getImageData(0, 0, size, size).data;
+
+            // Bucket pixels into 32-step color buckets and count
+            const buckets: Record<string, number> = {};
+            for (let i = 0; i < data.length; i += 4) {
+                const a = data[i + 3];
+                if (a < 30) continue; // skip transparent
+                const r = Math.round(data[i] / 32) * 32;
+                const g = Math.round(data[i + 1] / 32) * 32;
+                const b = Math.round(data[i + 2] / 32) * 32;
+                const key = `${r},${g},${b}`;
+                buckets[key] = (buckets[key] || 0) + 1;
+            }
+
+            // Sort by frequency, filter near-white and near-black, take top N
+            const sorted = Object.entries(buckets)
+                .sort((a, b) => b[1] - a[1])
+                .map(([k]) => k.split(',').map(Number))
+                .filter(([r, g, b]) => {
+                    const brightness = (r + g + b) / 3;
+                    return brightness > 30 && brightness < 230; // avoid pure black/white
+                });
+
+            const colors: string[] = [];
+            for (const [r, g, b] of sorted) {
+                if (colors.length >= count) break;
+                // Avoid too-similar colors
+                const tooSimilar = colors.some(existing => {
+                    const er = parseInt(existing.slice(1, 3), 16);
+                    const eg = parseInt(existing.slice(3, 5), 16);
+                    const eb = parseInt(existing.slice(5, 7), 16);
+                    return Math.abs(r - er) + Math.abs(g - eg) + Math.abs(b - eb) < 60;
+                });
+                if (!tooSimilar) {
+                    colors.push(`#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`);
+                }
+            }
+            resolve(colors);
+        };
+        img.onerror = () => resolve([]);
+        img.src = dataUrl;
+    });
+}
 
 export default function BrandProfilePanel({ userId, brandProfile }: BrandProfilePanelProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [profile, setProfile] = useState<BrandProfile>(brandProfile ?? DEFAULT_BRAND_PROFILE);
     const [isSaving, setIsSaving] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [editingColorIdx, setEditingColorIdx] = useState<number | null>(null);
+    const [extracting, setExtracting] = useState(false);
     const logoInputRef = useRef<HTMLInputElement>(null);
 
     // Sync from props when brandProfile changes externally
     useEffect(() => {
-        if (brandProfile) {
-            setProfile(brandProfile);
-        }
+        if (brandProfile) setProfile(brandProfile);
     }, [brandProfile]);
 
     const hasProfile = !!(brandProfile?.shopName);
@@ -42,19 +90,52 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
         setSaved(false);
     };
 
-    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onloadend = () => {
-            set({ logo: reader.result as string });
+        reader.onloadend = async () => {
+            const dataUrl = reader.result as string;
+            set({ logo: dataUrl });
+            // Auto-extract colors from logo
+            setExtracting(true);
+            const extracted = await extractColorsFromImage(dataUrl, profile.brandColors.length);
+            setExtracting(false);
+            if (extracted.length > 0) {
+                const newColors = [...profile.brandColors];
+                extracted.forEach((c, i) => { if (i < newColors.length) newColors[i] = c; });
+                set({ logo: dataUrl, brandColors: newColors });
+            }
         };
         reader.readAsDataURL(file);
+    };
+
+    const handleExtractColors = async () => {
+        if (!profile.logo) return;
+        setExtracting(true);
+        const extracted = await extractColorsFromImage(profile.logo, profile.brandColors.length);
+        setExtracting(false);
+        if (extracted.length > 0) {
+            const newColors = [...profile.brandColors];
+            extracted.forEach((c, i) => { if (i < newColors.length) newColors[i] = c; });
+            set({ brandColors: newColors });
+        }
     };
 
     const handleColorChange = (idx: number, color: string) => {
         const newColors = [...profile.brandColors];
         newColors[idx] = color;
+        set({ brandColors: newColors });
+    };
+
+    const handleAddColor = () => {
+        if (profile.brandColors.length >= 4) return;
+        set({ brandColors: [...profile.brandColors, '#CCCCCC'] });
+    };
+
+    const handleRemoveColor = (idx: number) => {
+        if (profile.brandColors.length <= 1) return;
+        const newColors = profile.brandColors.filter((_, i) => i !== idx);
         set({ brandColors: newColors });
     };
 
@@ -76,7 +157,7 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
 
     return (
         <section className="glass-card rounded-2xl overflow-hidden">
-            {/* Header — always visible */}
+            {/* Header */}
             <button
                 type="button"
                 onClick={() => setIsOpen(o => !o)}
@@ -90,26 +171,19 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
                         <Store size={16} />
                     </div>
                     <div>
-                        <span className="text-xs font-semibold text-gray-700 block leading-tight">
-                            Hồ sơ quán
-                        </span>
+                        <span className="text-xs font-semibold text-gray-700 block leading-tight">Hồ sơ quán</span>
                         {hasProfile ? (
                             <span className="text-[10px] text-green-600 font-medium flex items-center gap-0.5">
                                 <Check size={9} /> {brandProfile?.shopName}
                             </span>
                         ) : (
-                            <span className="text-[10px] text-gray-400">
-                                Thiết lập 1 lần, tự động điền mãi
-                            </span>
+                            <span className="text-[10px] text-gray-400">Thiết lập 1 lần, tự động điền mãi</span>
                         )}
                     </div>
                 </div>
-                <div className="text-gray-400">
-                    {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </div>
+                <div className="text-gray-400">{isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</div>
             </button>
 
-            {/* Collapsible content */}
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
@@ -120,9 +194,8 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
                         className="overflow-hidden"
                     >
                         <div className="px-4 pb-4 space-y-3 border-t border-gray-100">
-                            {/* Hint */}
                             <p className="text-[10px] text-gray-400 pt-2 leading-relaxed">
-                                Lưu thông tin quán 1 lần — tự động điền vào banner, logo, mô tả mỗi khi bạn tạo thiết kế.
+                                Lưu thông tin quán 1 lần — tự động điền vào banner, logo, mô tả mỗi khi tạo thiết kế.
                             </p>
 
                             {/* Logo upload */}
@@ -144,22 +217,34 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
                                             <ImageIcon size={18} className="text-gray-300" />
                                         )}
                                     </div>
-                                    <input
-                                        ref={logoInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={handleLogoUpload}
-                                    />
-                                    {profile.logo && (
-                                        <button
-                                            type="button"
-                                            onClick={() => set({ logo: null })}
-                                            className="text-[10px] text-red-400 hover:text-red-600 transition-colors"
-                                        >
-                                            Xóa logo
-                                        </button>
-                                    )}
+                                    <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                                    <div className="flex flex-col gap-1">
+                                        {profile.logo && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleExtractColors}
+                                                    disabled={extracting}
+                                                    className="flex items-center gap-1 text-[10px] text-brand-orange hover:text-brand-orange/80 font-medium disabled:opacity-50"
+                                                >
+                                                    {extracting ? <Loader2 size={10} className="animate-spin" /> : <Pipette size={10} />}
+                                                    Trích xuất màu từ logo
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => set({ logo: null })}
+                                                    className="text-[10px] text-red-400 hover:text-red-600 transition-colors text-left"
+                                                >
+                                                    Xóa logo
+                                                </button>
+                                            </>
+                                        )}
+                                        {!profile.logo && (
+                                            <p className="text-[9px] text-gray-400 leading-tight">
+                                                Tải logo lên để tự động<br />trích xuất màu thương hiệu
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
@@ -198,53 +283,71 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
                                 />
                             </div>
 
-                            {/* Brand Colors */}
+                            {/* Brand Colors — simplified */}
                             <div>
-                                <label className="text-[10px] font-mono uppercase text-gray-400 mb-1.5 block flex items-center gap-1">
-                                    <Palette size={10} />
-                                    Màu thương hiệu
-                                </label>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="text-[10px] font-mono uppercase text-gray-400 flex items-center gap-1">
+                                        <Palette size={10} />
+                                        Màu thương hiệu
+                                        <span className="font-normal normal-case text-gray-300">
+                                            ({profile.brandColors.length}/4 — {profile.brandColors.length === 1 ? 'chỉ màu chính' : `1 chính + ${profile.brandColors.length - 1} phụ`})
+                                        </span>
+                                    </label>
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
                                     {profile.brandColors.map((color, idx) => (
-                                        <div key={idx} className="relative">
-                                            <button
-                                                type="button"
-                                                onClick={() => setEditingColorIdx(editingColorIdx === idx ? null : idx)}
-                                                className="w-8 h-8 rounded-lg border-2 border-gray-200 hover:border-brand-orange transition-all shadow-sm"
+                                        <div key={idx} className="relative group/color">
+                                            {/* Color swatch — clicking opens native color picker */}
+                                            <label
+                                                className={cn(
+                                                    'relative block w-8 h-8 rounded-lg cursor-pointer transition-all shadow-sm hover:scale-110 hover:shadow-md',
+                                                    idx === 0 && 'ring-2 ring-offset-1 ring-brand-orange'
+                                                )}
                                                 style={{ backgroundColor: color }}
-                                                title={`Màu ${idx + 1}: ${color}`}
-                                            />
-                                            {editingColorIdx === idx && (
-                                                <div className="absolute top-10 left-0 z-20 bg-white border border-gray-200 rounded-xl p-2 shadow-xl">
-                                                    <div className="grid grid-cols-4 gap-1 mb-2">
-                                                        {COLOR_PRESETS.map(c => (
-                                                            <button
-                                                                key={c}
-                                                                type="button"
-                                                                onClick={() => { handleColorChange(idx, c); setEditingColorIdx(null); }}
-                                                                className={cn(
-                                                                    'w-6 h-6 rounded-md border transition-all hover:scale-110',
-                                                                    color === c ? 'border-brand-orange ring-1 ring-brand-orange' : 'border-gray-200'
-                                                                )}
-                                                                style={{ backgroundColor: c }}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                    <input
-                                                        type="color"
-                                                        value={color}
-                                                        onChange={(e) => handleColorChange(idx, e.target.value)}
-                                                        className="w-full h-6 rounded cursor-pointer"
-                                                    />
+                                                title={idx === 0 ? `Màu chính: ${color}` : `Màu phụ ${idx}: ${color}`}
+                                            >
+                                                <input
+                                                    type="color"
+                                                    value={color}
+                                                    onChange={(e) => handleColorChange(idx, e.target.value)}
+                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer rounded-lg"
+                                                />
+                                            </label>
+                                            {/* Remove button (not for primary color) */}
+                                            {idx > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveColor(idx)}
+                                                    className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/color:opacity-100 transition-opacity"
+                                                >
+                                                    <X size={8} />
+                                                </button>
+                                            )}
+                                            {/* Primary badge */}
+                                            {idx === 0 && (
+                                                <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[7px] text-brand-orange font-bold whitespace-nowrap">
+                                                    Chính
                                                 </div>
                                             )}
                                         </div>
                                     ))}
-                                    <span className="text-[9px] text-gray-300 ml-1">Click để đổi</span>
+
+                                    {/* Add color button */}
+                                    {profile.brandColors.length < 4 && (
+                                        <button
+                                            type="button"
+                                            onClick={handleAddColor}
+                                            className="w-8 h-8 rounded-lg border-2 border-dashed border-gray-200 hover:border-brand-orange hover:text-brand-orange flex items-center justify-center text-gray-300 transition-all"
+                                            title="Thêm màu phụ"
+                                        >
+                                            <Plus size={12} />
+                                        </button>
+                                    )}
                                 </div>
+                                <p className="text-[9px] text-gray-400 mt-1.5">Click vào ô màu để chọn màu. Màu chính (khung cam) là màu đại diện thương hiệu.</p>
                             </div>
 
-                            {/* Contact info — compact 2-col */}
+                            {/* Contact info */}
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
                                     <label className="text-[10px] font-mono uppercase text-gray-400 mb-1 block flex items-center gap-0.5">
@@ -286,7 +389,7 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
                                 />
                             </div>
 
-                            {/* Save button */}
+                            {/* Save */}
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving || !profile.shopName.trim() || !isDirty}
@@ -300,20 +403,11 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
                                 )}
                             >
                                 {isSaving ? (
-                                    <>
-                                        <Loader2 size={14} className="animate-spin" />
-                                        Đang lưu...
-                                    </>
+                                    <><Loader2 size={14} className="animate-spin" />Đang lưu...</>
                                 ) : saved ? (
-                                    <>
-                                        <Check size={14} />
-                                        Đã lưu thành công!
-                                    </>
+                                    <><Check size={14} />Đã lưu thành công!</>
                                 ) : (
-                                    <>
-                                        <Save size={14} />
-                                        {isDirty ? 'Lưu hồ sơ quán' : 'Không có thay đổi'}
-                                    </>
+                                    <><Save size={14} />{isDirty ? 'Lưu hồ sơ quán' : 'Không có thay đổi'}</>
                                 )}
                             </button>
                         </div>

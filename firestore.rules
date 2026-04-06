@@ -11,7 +11,22 @@ service cloud.firestore {
       allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
     }
 
-    // Rules for Generations and Orders (documents having userId field)
+    // Rules for Orders — users can read/write their own orders
+    match /orders/{orderId} {
+      allow read: if isAdmin() || (
+        request.auth != null && (
+          resource == null || resource.data.userId == request.auth.uid
+        )
+      );
+      allow write: if isAdmin() || (
+        request.auth != null && (
+          (resource != null && resource.data.userId == request.auth.uid) ||
+          (resource == null && request.resource.data.userId == request.auth.uid)
+        )
+      );
+    }
+
+    // Rules for Generations and other collections (documents having userId field)
     match /{collection}/{docId} {
       allow read, write: if isAdmin() || (
         request.auth != null && (

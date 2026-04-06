@@ -1,8 +1,64 @@
 import { LogoSettings } from '../types';
 
 /**
+ * Crop/resize a base64 image to the target aspect ratio using Canvas.
+ * Crops from center to maintain the most important content.
+ */
+export const cropToAspectRatio = async (
+    base64Image: string,
+    aspectRatio: string // e.g. '3:4', '16:9'
+): Promise<string> => {
+    return new Promise((resolve) => {
+        const [wStr, hStr] = aspectRatio.split(':');
+        const targetW = parseFloat(wStr);
+        const targetH = parseFloat(hStr);
+        if (!targetW || !targetH) {
+            resolve(base64Image);
+            return;
+        }
+        const targetRatio = targetW / targetH;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const srcRatio = img.width / img.height;
+
+            // If already correct ratio (within 2% tolerance), skip
+            if (Math.abs(srcRatio - targetRatio) / targetRatio < 0.02) {
+                resolve(base64Image);
+                return;
+            }
+
+            let srcX = 0, srcY = 0, srcW = img.width, srcH = img.height;
+
+            if (srcRatio > targetRatio) {
+                // Too wide → crop sides
+                srcW = Math.round(img.height * targetRatio);
+                srcX = Math.round((img.width - srcW) / 2);
+            } else {
+                // Too tall → crop top/bottom
+                srcH = Math.round(img.width / targetRatio);
+                srcY = Math.round((img.height - srcH) / 2);
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = srcW;
+            canvas.height = srcH;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(base64Image); return; }
+
+            ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(base64Image);
+        img.src = base64Image;
+    });
+};
+
+/**
  * Overlay a logo onto a base64 image using Canvas API.
  * Returns a new base64 data URL with the logo applied.
+ * Logo is clamped to stay fully inside the image bounds.
  */
 export const applyLogoToImage = async (
     base64Image: string,
@@ -38,12 +94,14 @@ export const applyLogoToImage = async (
                 // Calculate position based on center point (positionX/Y are 0-100%)
                 const centerX = mainImg.width * (logoSettings.positionX / 100);
                 const centerY = mainImg.height * (logoSettings.positionY / 100);
-                const x = centerX - logoWidth / 2;
-                const y = centerY - logoHeight / 2;
+                let x = centerX - logoWidth / 2;
+                let y = centerY - logoHeight / 2;
+
+                // CLAMP: ensure logo stays fully inside image bounds
+                x = Math.max(0, Math.min(mainImg.width - logoWidth, x));
+                y = Math.max(0, Math.min(mainImg.height - logoHeight, y));
 
                 if (logoSettings.addWhiteBorder) {
-                    ctx.shadowColor = 'white';
-                    ctx.shadowBlur = 0;
                     const borderSize = Math.max(2, mainImg.width * 0.005);
 
                     const offsets = [
@@ -57,15 +115,15 @@ export const applyLogoToImage = async (
                         [0, -borderSize],
                     ];
 
+                    ctx.save();
                     offsets.forEach(([ox, oy]) => {
+                        ctx.shadowColor = 'white';
+                        ctx.shadowBlur = 0;
                         ctx.shadowOffsetX = ox;
                         ctx.shadowOffsetY = oy;
                         ctx.drawImage(logoImg, x, y, logoWidth, logoHeight);
                     });
-
-                    ctx.shadowColor = 'transparent';
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 0;
+                    ctx.restore();
                 }
 
                 // Draw the actual logo

@@ -5,9 +5,10 @@ interface Props {
     settings: LogoSettings;
     onChange: (settings: LogoSettings) => void;
     aspectRatio: string;
+    brandProfileLogo?: string | null;
 }
 
-export default function LogoSettingsPanel({ settings, onChange, aspectRatio }: Props) {
+export default function LogoSettingsPanel({ settings, onChange, aspectRatio, brandProfileLogo }: Props) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -87,12 +88,25 @@ export default function LogoSettingsPanel({ settings, onChange, aspectRatio }: P
             </div>
 
             {!settings.image ? (
-                <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                    <p className="text-xs font-medium text-gray-500">Tải lên Logo (PNG tách nền)</p>
-                    <p className="text-[9px] text-gray-400 mt-0.5">Click để chọn file</p>
+                <div className="space-y-1.5">
+                    {/* Restore from brand profile if available */}
+                    {brandProfileLogo && (
+                        <button
+                            type="button"
+                            onClick={() => onChange({ ...settings, image: brandProfileLogo })}
+                            className="w-full flex items-center gap-2 px-3 py-2 bg-brand-orange/5 border border-brand-orange/20 hover:bg-brand-orange/10 rounded-xl transition-colors"
+                        >
+                            <img src={brandProfileLogo} alt="Brand logo" className="w-6 h-6 object-contain rounded" />
+                            <span className="text-[10px] font-medium text-brand-orange">Dùng logo từ hồ sơ quán</span>
+                        </button>
+                    )}
+                    <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-gray-200 rounded-xl p-3 text-center cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
+                        <p className="text-xs font-medium text-gray-500">Tải lên Logo (PNG tách nền)</p>
+                        <p className="text-[9px] text-gray-400 mt-0.5">Click để chọn file</p>
+                    </div>
                 </div>
             ) : (
                 <div className="space-y-3">
