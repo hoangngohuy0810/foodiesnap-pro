@@ -64,7 +64,7 @@ export default function Navbar() {
                             <Camera size={20} />
                         </div>
                         <span className="text-xl font-bold tracking-tight hidden sm:block">
-                            FoodieSnap <span className="text-brand-orange italic">Pro</span>
+                            Ảnh Đẹp
                         </span>
                     </Link>
 

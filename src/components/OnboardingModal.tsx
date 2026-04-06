@@ -13,7 +13,7 @@ const STEPS = [
         icon: Gift,
         iconBg: 'bg-green-100',
         iconColor: 'text-green-600',
-        title: 'Chào mừng đến FoodieSnap Pro! 🎉',
+        title: 'Chào mừng đến với Ảnh Đẹp! 🎉',
         description: 'Bạn vừa nhận được 3 credits miễn phí để trải nghiệm. Hãy biến ảnh món ăn của bạn thành tác phẩm nghệ thuật ngay hôm nay!',
         cta: 'Bắt đầu hướng dẫn',
     },
@@ -80,10 +80,10 @@ export default function OnboardingModal({ open, userName, onClose }: OnboardingM
                                 <div
                                     key={i}
                                     className={`h-1.5 rounded-full transition-all duration-300 ${i === step
-                                            ? 'w-6 bg-brand-orange'
-                                            : i < step
-                                                ? 'w-1.5 bg-brand-orange/40'
-                                                : 'w-1.5 bg-gray-200'
+                                        ? 'w-6 bg-brand-orange'
+                                        : i < step
+                                            ? 'w-1.5 bg-brand-orange/40'
+                                            : 'w-1.5 bg-gray-200'
                                         }`}
                                 />
                             ))}

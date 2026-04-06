@@ -17,9 +17,9 @@ export default function PrivacyPolicyPage() {
                     <section>
                         <h2 className="text-xl font-bold mb-3">1. Giới thiệu</h2>
                         <p>
-                            FoodieSnap Pro ("chúng tôi", "của chúng tôi") cam kết bảo vệ quyền riêng tư của bạn.
+                            Ảnh Đẹp ("chúng tôi", "của chúng tôi") cam kết bảo vệ quyền riêng tư của bạn.
                             Chính sách Bảo mật này giải thích cách chúng tôi thu thập, sử dụng, lưu trữ và bảo vệ
-                            thông tin cá nhân của bạn khi sử dụng dịch vụ FoodieSnap Pro tại <strong>anhnet.top</strong>.
+                            thông tin cá nhân của bạn khi sử dụng dịch vụ Ảnh Đẹp tại <strong>anhnet.top</strong>.
                         </p>
                     </section>
 

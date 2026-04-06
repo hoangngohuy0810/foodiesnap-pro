@@ -682,7 +682,7 @@ export default function AppPage() {
 
                 {/* ── Footer ── */}
                 <footer className="max-w-7xl mx-auto px-6 mt-20 pt-8 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4 text-gray-400 text-xs">
-                    <p>© 2026 FoodieSnap Pro. Powered by Gemini AI Image Generation.</p>
+                    <p>© 2026 Ảnh Đẹp. Powered by Gemini AI Image Generation.</p>
                     <div className="flex items-center gap-6">
                         <a href="/privacy-policy" className="hover:text-brand-orange transition-colors">Chính sách bảo mật</a>
                         <a href="/terms-of-service" className="hover:text-brand-orange transition-colors">Điều khoản dịch vụ</a>
