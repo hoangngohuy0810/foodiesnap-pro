@@ -208,7 +208,7 @@ export default function BannerSettingsPanel({
                 {isGenerating ? (
                     <>
                         <Loader2 className="animate-spin" size={15} />
-                        <span className="text-sm">Đang tạo banner...</span>
+                        <span className="text-sm">Đang tạo banner (~1 phút)...</span>
                     </>
                 ) : !isLoggedIn ? (
                     <>

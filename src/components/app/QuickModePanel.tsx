@@ -1,15 +1,17 @@
 import React, { useRef } from 'react';
 import { Sparkles, Loader2, User, ShoppingCart, Image as ImageIcon, X, Zap, Settings2, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { GenerationSettings } from '../../types';
 
 interface QuickModePanelProps {
     foodPreview: string | null;
+    settings: GenerationSettings;
     onFoodChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onFoodClear: () => void;
     isGenerating: boolean;
     isLoggedIn: boolean;
     credits: number;
-    /** Credit cost for 1 image at default quick settings */
+    /** Credit cost for 1 image at current quick settings */
     quickCreditCost: number;
     onGenerate: () => void;
     onSwitchToAdvanced: () => void;
@@ -17,6 +19,7 @@ interface QuickModePanelProps {
 
 export default function QuickModePanel({
     foodPreview,
+    settings,
     onFoodChange,
     onFoodClear,
     isGenerating,
@@ -103,16 +106,16 @@ export default function QuickModePanel({
             {/* Quick settings summary */}
             <div className="bg-gray-50 rounded-xl px-3 py-2">
                 <div className="flex items-center justify-between text-[10px] text-gray-500">
-                    <span>AI tự động chọn:</span>
-                    <div className="flex items-center gap-1.5">
+                    <span>Thiết lập:</span>
+                    <div className="flex items-center gap-1 flex-wrap justify-end">
                         <span className="bg-white border border-gray-200 px-1.5 py-0.5 rounded text-[9px] font-semibold">
-                            Chuyên nghiệp
+                            {settings.style}
                         </span>
                         <span className="bg-white border border-gray-200 px-1.5 py-0.5 rounded text-[9px] font-semibold">
-                            Ánh sáng tự nhiên
+                            {settings.aspectRatio}
                         </span>
                         <span className="bg-white border border-gray-200 px-1.5 py-0.5 rounded text-[9px] font-semibold">
-                            1:1
+                            {settings.imageSize}
                         </span>
                     </div>
                 </div>
@@ -164,7 +167,7 @@ export default function QuickModePanel({
                 {isGenerating ? (
                     <>
                         <Loader2 className="animate-spin" size={20} />
-                        Đang nâng cấp...
+                        Đang nâng cấp (~1 phút)...
                     </>
                 ) : !isLoggedIn ? (
                     <>

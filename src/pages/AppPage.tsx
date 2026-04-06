@@ -72,13 +72,6 @@ export default function AppPage() {
         localStorage.setItem('foodiesnap-quick-mode', String(val));
     };
 
-    // Quick mode uses fixed optimal settings: nano-banana-2, 1 image, 1:1, 1K
-    const QUICK_SETTINGS: GenerationSettings = {
-        ...DEFAULT_FOOD_SETTINGS,
-        count: 1,
-    };
-    const quickCreditCost = (IMAGE_MODELS.find(m => m.id === QUICK_SETTINGS.modelId)?.creditCost ?? 2) * (IMAGE_SIZE_MULTIPLIER[QUICK_SETTINGS.imageSize] ?? 1);
-
     // ══════════════════════════════════════════════════════════════════════════
     // SHARED STATE — unified session images from both food & banner
     // ══════════════════════════════════════════════════════════════════════════
@@ -93,8 +86,26 @@ export default function AppPage() {
     const [bgImage, setBgImage] = useState<File | null>(null);
     const [bgPreview, setBgPreview] = useState<string | null>(null);
     const [sideDishes, setSideDishes] = useState<SideDish[]>([]);
-    const [foodSettings, setFoodSettings] = useState<GenerationSettings>(DEFAULT_FOOD_SETTINGS);
+    const [foodSettings, setFoodSettings] = useState<GenerationSettings>(() => {
+        const saved = localStorage.getItem('foodiesnap-food-settings');
+        if (saved) {
+            try { return JSON.parse(saved); } catch { }
+        }
+        return DEFAULT_FOOD_SETTINGS;
+    });
     const [isFoodGenerating, setIsFoodGenerating] = useState(false);
+
+    // Persist food settings to localStorage whenever they change
+    useEffect(() => {
+        localStorage.setItem('foodiesnap-food-settings', JSON.stringify(foodSettings));
+    }, [foodSettings]);
+
+    // Quick mode uses user's saved detailed settings but forces count to 1
+    const QUICK_SETTINGS: GenerationSettings = {
+        ...foodSettings,
+        count: 1,
+    };
+    const quickCreditCost = (IMAGE_MODELS.find(m => m.id === QUICK_SETTINGS.modelId)?.creditCost ?? 2) * (IMAGE_SIZE_MULTIPLIER[QUICK_SETTINGS.imageSize] ?? 1);
 
     // ══════════════════════════════════════════════════════════════════════════
     // BANNER TAB STATE
@@ -578,6 +589,7 @@ export default function AppPage() {
                                     {isQuickMode ? (
                                         <QuickModePanel
                                             foodPreview={foodPreview}
+                                            settings={foodSettings}
                                             onFoodChange={(e) => handleFileChange(e, 'food')}
                                             onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
                                             isGenerating={isFoodGenerating}

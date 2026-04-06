@@ -14,7 +14,7 @@ const FEATURES = [
         icon: Timer,
         color: 'text-brand-orange bg-brand-orange/10',
         title: 'Tốc Độ Ánh Sáng',
-        desc: 'Tiết kiệm hàng giờ setup studio. Chỉ mất ~10 giây để AI xử lý xong một bức ảnh.',
+        desc: 'Tiết kiệm hàng giờ setup studio. Chỉ mất ~1 phút để AI xử lý xong một bức ảnh chất lượng thương mại.',
     },
     {
         icon: HandCoins,
@@ -78,7 +78,7 @@ const FAQS = [
 const STEPS = [
     { num: '01', icon: Upload, title: 'Tải Ảnh Gốc', desc: 'Chỉ cần một bức ảnh chụp từ điện thoại thông thường.' },
     { num: '02', icon: Sliders, title: 'Cấu Hình Nhanh', desc: 'Chọn phong cách, phông nền hoặc để AI tự động quyết định.' },
-    { num: '03', icon: Sparkles, title: 'AI Biến Hóa', desc: 'Đợi vài giây để Gemini xử lý ánh sáng và chi tiết.' },
+    { num: '03', icon: Sparkles, title: 'AI Biến Hóa', desc: 'Đợi khoảng 1 phút để Gemini xử lý ánh sáng, chi tiết và tạo ảnh chất lượng cao.' },
     { num: '04', icon: Download, title: 'Tải Xuống', desc: 'Sẵn sàng dùng ngay cho Menu, Website hoặc Fanpage.' },
 ];
 
@@ -181,7 +181,7 @@ export default function LandingPage() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                         {[
                             { num: '95%', label: 'Tiết Kiệm Chi Phí' },
-                            { num: '10s', label: 'Hoàn Thành 1 Ảnh' },
+                            { num: '~1p', label: 'Hoàn Thành 1 Ảnh' },
                             { num: '10,000+', label: 'Ảnh Đã Xử Lý' },
                             { num: '24/7', label: 'Hoạt Động Liên Tục' },
                         ].map((s, i) => (

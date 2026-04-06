@@ -250,6 +250,24 @@ export default function GenerationHistory({
                                     </div>
                                     <div className="flex-1 h-px bg-gray-100" />
                                 </div>
+
+                                {/* Estimated time message */}
+                                <div className="mb-3 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 rounded-xl px-4 py-3">
+                                    <div className="flex items-start gap-2.5">
+                                        <div className="w-8 h-8 bg-brand-orange/10 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                                            <Clock size={16} className="text-brand-orange" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-800">
+                                                ⏳ Thời gian ước tính: <span className="text-brand-orange">~1 phút</span>
+                                            </p>
+                                            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                                                AI đang phân tích và tạo ảnh chất lượng cao. Bạn có thể chờ tại đây — ảnh sẽ tự động hiện khi hoàn tất!
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
                                     {Array.from({ length: pendingCount }).map((_, i) => (
                                         <motion.div

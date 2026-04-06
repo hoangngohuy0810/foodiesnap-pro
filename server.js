@@ -86,7 +86,7 @@ app.use((err, req, res, next) => {
 // 4. Rate limiting
 const generateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Quá nhiều yêu cầu tạo ảnh. Vui lòng thử lại sau 15 phút.' },

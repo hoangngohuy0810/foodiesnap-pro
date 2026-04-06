@@ -100,7 +100,7 @@ export default function BannerGallery({ images, isGenerating, expectedCount, onR
                     Kết quả
                     {isGenerating && (
                         <span className="text-xs font-normal text-brand-orange animate-pulse bg-brand-orange/10 px-2.5 py-0.5 rounded-full">
-                            Đang tạo {expectedCount} biến thể...
+                            Đang tạo {expectedCount} biến thể (~1 phút)...
                         </span>
                     )}
                     {!isGenerating && images.length > 0 && (

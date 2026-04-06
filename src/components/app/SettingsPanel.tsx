@@ -273,7 +273,7 @@ export default function SettingsPanel({
                 {isGenerating ? (
                     <>
                         <Loader2 className="animate-spin" size={16} />
-                        <span className="text-sm">Đang tạo...</span>
+                        <span className="text-sm">Đang tạo (~1 phút)...</span>
                     </>
                 ) : !isLoggedIn ? (
                     <>
