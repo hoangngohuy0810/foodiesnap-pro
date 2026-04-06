@@ -46,6 +46,8 @@ app.use(helmet({
 
 // 3. CORS – allow only production domain + localhost dev
 const ALLOWED_ORIGINS = [
+  'https://anhnet.top',
+  'https://www.anhnet.top',
   'https://foodiesnap-pro.web.app',
   'https://foodiesnap-pro.firebaseapp.com',
   'http://localhost:3000',

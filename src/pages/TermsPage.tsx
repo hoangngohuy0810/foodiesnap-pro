@@ -109,7 +109,7 @@ export default function TermsPage() {
                         <h2 className="text-xl font-bold mb-3">11. Liên hệ</h2>
                         <p>
                             Câu hỏi về Điều khoản Dịch vụ:{' '}
-                            <a href="mailto:support@foodiesnap.pro" className="text-brand-orange hover:underline">support@foodiesnap.pro</a>
+                            <a href="mailto:support@anhnet.top" className="text-brand-orange hover:underline">support@anhnet.top</a>
                         </p>
                     </section>
                 </div>

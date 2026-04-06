@@ -19,7 +19,7 @@ export default function PrivacyPolicyPage() {
                         <p>
                             FoodieSnap Pro ("chúng tôi", "của chúng tôi") cam kết bảo vệ quyền riêng tư của bạn.
                             Chính sách Bảo mật này giải thích cách chúng tôi thu thập, sử dụng, lưu trữ và bảo vệ
-                            thông tin cá nhân của bạn khi sử dụng dịch vụ FoodieSnap Pro tại <strong>foodiesnap-pro.web.app</strong>.
+                            thông tin cá nhân của bạn khi sử dụng dịch vụ FoodieSnap Pro tại <strong>anhnet.top</strong>.
                         </p>
                     </section>
 
@@ -74,7 +74,7 @@ export default function PrivacyPolicyPage() {
                             <li>Quyền cập nhật thông tin cá nhân.</li>
                         </ul>
                         <p className="mt-3">
-                            Để thực hiện các quyền này, hãy liên hệ: <a href="mailto:support@foodiesnap.pro" className="text-brand-orange hover:underline">support@foodiesnap.pro</a>
+                            Để thực hiện các quyền này, hãy liên hệ: <a href="mailto:support@anhnet.top" className="text-brand-orange hover:underline">support@anhnet.top</a>
                         </p>
                     </section>
 
@@ -98,7 +98,7 @@ export default function PrivacyPolicyPage() {
                         <h2 className="text-xl font-bold mb-3">9. Liên hệ</h2>
                         <p>
                             Nếu có câu hỏi về Chính sách Bảo mật, vui lòng liên hệ:{' '}
-                            <a href="mailto:support@foodiesnap.pro" className="text-brand-orange hover:underline">support@foodiesnap.pro</a>
+                            <a href="mailto:support@anhnet.top" className="text-brand-orange hover:underline">support@anhnet.top</a>
                         </p>
                     </section>
                 </div>

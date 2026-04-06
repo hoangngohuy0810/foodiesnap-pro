@@ -83,7 +83,7 @@ export default function RefundPolicyPage() {
                     <section>
                         <h2 className="text-xl font-bold mb-3">3. Quy trình yêu cầu hoàn tiền</h2>
                         <ol className="list-decimal pl-6 space-y-2 text-sm">
-                            <li>Gửi email đến <a href="mailto:support@foodiesnap.pro" className="text-brand-orange hover:underline">support@foodiesnap.pro</a></li>
+                            <li>Gửi email đến <a href="mailto:support@anhnet.top" className="text-brand-orange hover:underline">support@anhnet.top</a></li>
                             <li>Tiêu đề: "Yêu cầu hoàn tiền - [Mã đơn hàng]"</li>
                             <li>Nội dung: Mô tả lý do, kèm ảnh chụp màn hình nếu có</li>
                             <li>Chúng tôi sẽ phản hồi trong vòng 2 ngày làm việc</li>
@@ -105,7 +105,7 @@ export default function RefundPolicyPage() {
                     <section>
                         <h2 className="text-xl font-bold mb-3">5. Liên hệ hỗ trợ</h2>
                         <p className="text-sm">
-                            Email: <a href="mailto:support@foodiesnap.pro" className="text-brand-orange hover:underline">support@foodiesnap.pro</a>
+                            Email: <a href="mailto:support@anhnet.top" className="text-brand-orange hover:underline">support@anhnet.top</a>
                             <br />
                             Thời gian hỗ trợ: 8:00 – 22:00, Thứ 2 – Chủ nhật
                         </p>
