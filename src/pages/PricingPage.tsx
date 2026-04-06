@@ -31,7 +31,7 @@ function imagesPerPackage(credits: number, creditCost: number): string {
 const FAQS = [
     {
         q: 'Credit là gì?',
-        a: 'Credit là đơn vị dùng để tạo ảnh AI trên Ảnh Đẹp. Mỗi lần tạo ảnh sẽ trừ một số credit tùy theo model và chất lượng bạn chọn.',
+        a: 'Credit là đơn vị dùng để tạo ảnh AI trên Ảnh Nét. Mỗi lần tạo ảnh sẽ trừ một số credit tùy theo model và chất lượng bạn chọn.',
     },
     {
         q: 'Credit có hết hạn không?',
@@ -43,7 +43,7 @@ const FAQS = [
     },
     {
         q: 'Có hoàn tiền không?',
-        a: 'Ảnh Đẹp không hoàn tiền sau khi credit đã được cộng vào tài khoản. Tuy nhiên, credit bị trừ do lỗi hệ thống sẽ được hoàn lại tự động.',
+        a: 'Ảnh Nét không hoàn tiền sau khi credit đã được cộng vào tài khoản. Tuy nhiên, credit bị trừ do lỗi hệ thống sẽ được hoàn lại tự động.',
     },
     {
         q: '4 credit miễn phí dùng được gì?',

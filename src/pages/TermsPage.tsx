@@ -17,7 +17,7 @@ export default function TermsPage() {
                     <section>
                         <h2 className="text-xl font-bold mb-3">1. Chấp nhận điều khoản</h2>
                         <p>
-                            Bằng cách truy cập và sử dụng Ảnh Đẹp, bạn đồng ý bị ràng buộc bởi các Điều khoản
+                            Bằng cách truy cập và sử dụng Ảnh Nét, bạn đồng ý bị ràng buộc bởi các Điều khoản
                             Dịch vụ này. Nếu không đồng ý, vui lòng không sử dụng dịch vụ.
                         </p>
                     </section>
@@ -25,7 +25,7 @@ export default function TermsPage() {
                     <section>
                         <h2 className="text-xl font-bold mb-3">2. Mô tả dịch vụ</h2>
                         <p>
-                            Ảnh Đẹp là nền tảng tạo ảnh món ăn chuyên nghiệp sử dụng trí tuệ nhân tạo (AI Gemini).
+                            Ảnh Nét là nền tảng tạo ảnh món ăn chuyên nghiệp sử dụng trí tuệ nhân tạo (AI Gemini).
                             Người dùng tải ảnh lên, chọn cài đặt và nhận ảnh đã được nâng cao chất lượng.
                         </p>
                     </section>
@@ -83,7 +83,7 @@ export default function TermsPage() {
                     <section>
                         <h2 className="text-xl font-bold mb-3">8. Giới hạn trách nhiệm</h2>
                         <p>
-                            Ảnh Đẹp không đảm bảo dịch vụ hoạt động liên tục, không có lỗi.
+                            Ảnh Nét không đảm bảo dịch vụ hoạt động liên tục, không có lỗi.
                             Chúng tôi không chịu trách nhiệm cho thiệt hại gián tiếp phát sinh từ việc sử dụng dịch vụ.
                             Trách nhiệm tối đa của chúng tôi không vượt quá số tiền bạn đã thanh toán trong 30 ngày gần nhất.
                         </p>

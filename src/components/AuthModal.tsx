@@ -107,7 +107,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
                   {mode === 'login'
-                    ? 'Đăng nhập để sử dụng Ảnh Đẹp'
+                    ? 'Đăng nhập để sử dụng Ảnh Nét'
                     : 'Đăng ký miễn phí, nhận ngay 3 credits'}
                 </p>
               </div>

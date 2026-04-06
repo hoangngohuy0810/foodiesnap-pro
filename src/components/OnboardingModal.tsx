@@ -13,7 +13,7 @@ const STEPS = [
         icon: Gift,
         iconBg: 'bg-green-100',
         iconColor: 'text-green-600',
-        title: 'Chào mừng đến với Ảnh Đẹp! 🎉',
+        title: 'Chào mừng đến với Ảnh Nét! 🎉',
         description: 'Bạn vừa nhận được 3 credits miễn phí để trải nghiệm. Hãy biến ảnh món ăn của bạn thành tác phẩm nghệ thuật ngay hôm nay!',
         cta: 'Bắt đầu hướng dẫn',
     },

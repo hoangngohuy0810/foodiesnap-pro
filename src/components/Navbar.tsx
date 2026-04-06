@@ -64,7 +64,7 @@ export default function Navbar() {
                             <Camera size={20} />
                         </div>
                         <span className="text-xl font-bold tracking-tight hidden sm:block">
-                            Ảnh Đẹp
+                            Ảnh Nét
                         </span>
                     </Link>
 

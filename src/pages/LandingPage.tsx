@@ -50,7 +50,7 @@ const FEATURES = [
 
 const FAQS = [
     {
-        q: 'Ảnh Đẹp hoạt động như thế nào?',
+        q: 'Ảnh Nét hoạt động như thế nào?',
         a: 'Bạn tải ảnh món ăn lên, chọn phong cách và cài đặt mong muốn. AI Gemini sẽ xử lý và tạo ra ảnh chất lượng studio chuyên nghiệp trong vài giây.',
     },
     {
@@ -75,7 +75,7 @@ const FAQS = [
     },
     {
         q: 'Tôi có thể dùng ảnh output vào mục đích thương mại không?',
-        a: 'Có, ảnh được tạo thuộc quyền sở hữu của bạn và có thể dùng cho mục đích thương mại theo Điều khoản sử dụng của Ảnh Đẹp.',
+        a: 'Có, ảnh được tạo thuộc quyền sở hữu của bạn và có thể dùng cho mục đích thương mại theo Điều khoản sử dụng của Ảnh Nét.',
     },
 ];
 
@@ -401,7 +401,7 @@ export default function LandingPage() {
                     <div className="text-5xl">🍜</div>
                     <h2 className="text-4xl font-bold">Sẵn sàng nâng tầm ảnh món ăn?</h2>
                     <p className="text-gray-300 text-lg">
-                        Tham gia cùng hàng trăm chủ nhà hàng, food blogger đang dùng Ảnh Đẹp.
+                        Tham gia cùng hàng trăm chủ nhà hàng, food blogger đang dùng Ảnh Nét.
                     </p>
                     <Link
                         to="/app"
@@ -424,10 +424,10 @@ export default function LandingPage() {
                         <div className="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center">
                             <Camera size={16} className="text-white" />
                         </div>
-                        <span className="text-white font-bold">Ảnh Đẹp</span>
+                        <span className="text-white font-bold">Ảnh Nét</span>
                     </div>
 
-                    <p className="text-xs text-center">© 2026 Ảnh Đẹp. Powered by Gemini 3.1 Flash Image.</p>
+                    <p className="text-xs text-center">© 2026 Ảnh Nét. Powered by Gemini 3.1 Flash Image.</p>
 
                     <div className="flex items-center gap-5 text-xs">
                         <Link to="/privacy-policy" className="hover:text-white transition-colors">Chính sách bảo mật</Link>

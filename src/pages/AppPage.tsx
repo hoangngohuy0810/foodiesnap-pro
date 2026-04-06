@@ -258,8 +258,13 @@ export default function AppPage() {
 
         setIsFoodGenerating(true);
         try {
-            const foodBase64 = await fileToBase64(foodImage);
-            const bgBase64 = (!useQuickSettings && bgImage) ? await fileToBase64(bgImage) : null;
+            let foodBase64 = await fileToBase64(foodImage);
+            foodBase64 = await cropToAspectRatio(foodBase64, activeSettings.aspectRatio);
+
+            let bgBase64 = (!useQuickSettings && bgImage) ? await fileToBase64(bgImage) : null;
+            if (bgBase64) {
+                bgBase64 = await cropToAspectRatio(bgBase64, activeSettings.aspectRatio);
+            }
             const token = await getIdToken();
 
             const sideDishesData = !useQuickSettings ? await Promise.all(
@@ -682,7 +687,7 @@ export default function AppPage() {
 
                 {/* ── Footer ── */}
                 <footer className="max-w-7xl mx-auto px-6 mt-20 pt-8 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4 text-gray-400 text-xs">
-                    <p>© 2026 Ảnh Đẹp. Powered by Gemini AI Image Generation.</p>
+                    <p>© 2026 Ảnh Nét. Powered by Gemini AI Image Generation.</p>
                     <div className="flex items-center gap-6">
                         <a href="/privacy-policy" className="hover:text-brand-orange transition-colors">Chính sách bảo mật</a>
                         <a href="/terms-of-service" className="hover:text-brand-orange transition-colors">Điều khoản dịch vụ</a>

@@ -244,6 +244,7 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     ? `
     Tạo ảnh món ăn thương mại chất lượng siêu cao, đạt chuẩn tạp chí ẩm thực cao cấp.
     Chủ thể: Món ăn trong ảnh được tải lên.
+    Tỉ lệ khung hình (Aspect Ratio): BẮT BUỘC tạo ảnh có tỉ lệ ${settings.aspectRatio || '1:1'}.
     Phong cách: ${settings.style} - thực hiện với độ chính xác và chi tiết tối đa.
     Ánh sáng: ${settings.lighting} - ánh sáng nhiều lớp, tạo chiều sâu và kịch tính.
     Góc máy: ${settings.angle} - bố cục hoàn hảo, cân bằng thị giác tuyệt đối.
@@ -260,6 +261,7 @@ ${sideDishPromptSection}
     : `
     Tăng cường chất lượng ảnh món ăn chuyên nghiệp.
     Chủ thể: Món ăn trong ảnh được tải lên.
+    Tỉ lệ khung hình (Aspect Ratio): BẮT BUỘC tạo ảnh có tỉ lệ ${settings.aspectRatio || '1:1'}.
     Phong cách: ${settings.style}.
     Ánh sáng: ${settings.lighting}.
     Góc máy: ${settings.angle}.
