@@ -242,7 +242,14 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
       const desc = d.description?.trim();
       return `    - Món phụ ${i + 1}${desc ? `: ${desc}` : ''}`;
     }).join('\n') +
-    `\n    QUAN TRỌNG: Đặt các món phụ này ở vị trí hỗ trợ (góc, cạnh, hoặc nền gần) để cân bằng bố cục. Chúng KHÔNG được chiếm spotlight của món chính - chỉ đóng vai trò đạo cụ và trang trí tôn vinh món chính.`
+    `\n    HƯỚNG DẪN BỐ CỤC MÓN PHỤ (RẤT QUAN TRỌNG):
+    - Đặt các món phụ trên ĐĨA/BÁT RIÊNG BÊN CẠNH món chính trên CÙNG MẶT BÀN, như cách bày bàn ăn thật trong nhà hàng.
+    - Món phụ phải RÕ RÀNG, SẮC NÉT, dễ nhận diện — KHÔNG ĐƯỢC LÀM MỜ, KHÔNG ĐƯỢC biến thành nền hoặc bokeh.
+    - Kích thước đĩa/bát món phụ NHỎ HƠN món chính khoảng 30-50%, đặt ở BÊN TRÁI hoặc BÊN PHẢI hoặc PHÍA TRƯỚC món chính, hơi chéo nhẹ để tạo chiều sâu.
+    - Món chính vẫn ở TRUNG TÂM và NỔI BẬT NHẤT (lớn nhất, sắc nét nhất, được chiếu sáng tốt nhất).
+    - Món phụ có thể hơi lệch khỏi điểm nét chính (depth of field nhẹ) nhưng vẫn phải ĐỦ RÕ để người xem nhận ra đó là món gì.
+    - Tổng thể trông như một BỮA ĂN HOÀN CHỈNH được bày biện đẹp mắt, hài hòa trên bàn ăn — KHÔNG phải một món duy nhất với nền mờ.
+    - Tinh chỉnh màu sắc, ánh sáng của món phụ cho ngon mắt, hấp dẫn, phù hợp với tông ảnh tổng thể.`
     : '';
 
   const bgAnalysisInstructions = bgBase64 ? `

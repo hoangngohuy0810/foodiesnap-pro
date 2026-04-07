@@ -187,7 +187,7 @@ export default function UploadPanel({
                             <div className="px-3 pb-3 space-y-2 border-t border-dashed border-gray-100">
                                 {/* Description hint */}
                                 <p className="text-[10px] text-gray-400 pt-2">
-                                    Tải lên các món phụ (tối đa {MAX_SIDE_DISHES}). AI sẽ thêm chúng vào ảnh để làm cân bằng bố cục mà không chiếm spotlight của món chính.
+                                    Tải lên các món phụ (tối đa {MAX_SIDE_DISHES}). AI sẽ bày chúng bên cạnh món chính như một bữa ăn hoàn chỉnh — rõ ràng, ngon mắt nhưng không lấn át món chính.
                                 </p>
 
                                 {/* Per-dish rows */}
