@@ -1047,7 +1047,32 @@ app.post('/api/generate/edit', generateLimiter, verifyToken, async (req, res) =>
   }
 });
 
-// 13. Phục vụ Frontend Vite React sau khi build
+// 13. GET /api/download-image — Proxy tải ảnh với Content-Disposition: attachment
+app.get('/api/download-image', async (req, res) => {
+  const { url, filename } = req.query;
+  if (!url) return res.status(400).json({ error: 'Missing url parameter' });
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Upstream responded ${response.status}`);
+
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const safeName = (filename || 'foodiesnap-image.png').replace(/[^a-zA-Z0-9._-]/g, '_');
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+
+    // Pipe the response body to the client
+    const arrayBuffer = await response.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (err) {
+    console.error('[Download Proxy] Error:', err.message);
+    res.status(500).json({ error: 'Failed to download image' });
+  }
+});
+
+// 14. Phục vụ Frontend Vite React sau khi build
 app.use(express.static(path.join(__dirname, 'dist')));
 // SPA fallback - must be after API routes
 app.get('*', (_req, res) => {

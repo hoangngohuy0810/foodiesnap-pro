@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Download, X, Image as ImageIcon, Loader2, Sparkles, Search } from 'lucide-react';
 import { BannerGeneratedImage } from '../../../types';
+import { downloadImage as downloadImageUtil } from '../../../lib/utils';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -17,12 +18,7 @@ const getAspectClass = (ratio: string) => {
 };
 
 const downloadImage = (url: string, id: string) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `banner-${id}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadImageUtil(url, `banner-${id}.png`);
 };
 
 // ── Props ─────────────────────────────────────────────────────────────────────
