@@ -1,4 +1,3 @@
-import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -246,15 +245,28 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     : '';
 
   const bgAnalysisInstructions = bgBase64 ? `
-    ⚠️ PHÂN TÍCH NỀN BẮT BUỘC (ảnh nền được đính kèm):
-    Trước khi tạo ảnh, hãy phân tích kỹ ảnh nền để xác định:
-    a) PHỐI CẢNH & GÓC CHỤP: Xác định góc nhìn (từ trên xuống, ngang, 45°...), điểm tụ, đường chân trời trong ảnh nền.
-    b) TỶ LỆ & KÍCH THƯỚC: Xác định kích thước các vật thể trong nền (bàn, ghế, đĩa, ly...) để suy ra tỷ lệ thực tế. Món ăn phải có kích thước THỰC TẾ tương xứng — ví dụ nếu nền là bàn ăn nhà hàng thì đĩa món ăn chỉ chiếm khoảng 20-35% chiều rộng mặt bàn, KHÔNG ĐƯỢC chiếm quá lớn hay trở nên khổng lồ so với bối cảnh.
-    c) BỀ MẶT ĐẶT MÓN: Xác định bề mặt phù hợp nhất để đặt món ăn (mặt bàn, quầy bar, kệ...). Món ăn PHẢI được đặt TRÊN bề mặt đó với phối cảnh đúng, không lơ lửng giữa không trung.
-    d) ÁNH SÁNG & MÀU SẮC: Phân tích hướng ánh sáng chính, nhiệt độ màu (ấm/lạnh), cường độ sáng, và bóng đổ trong nền. Ánh sáng, bóng đổ và nhiệt độ màu trên món ăn PHẢI khớp chính xác với môi trường nền.
-    e) ĐỘ SÂU TRƯỜNG ẢNH: Nếu nền có vùng mờ (bokeh), đảm bảo món ăn nằm trong vùng nét phù hợp với mặt phẳng lấy nét của nền.
+    ⚠️ HƯỚNG DẪN XỬ LÝ NỀN BẮT BUỘC (ảnh nền được đính kèm):
+    MỤC TIÊU CHÍNH: Tạo ảnh ẨM THỰC THƯƠNG MẠI — MÓN ĂN là NHÂN VẬT CHÍNH, nền chỉ là BỐI CẢNH HỖ TRỢ.
     
-    QUY TẮC VÀNG: Nền là BỐI CẢNH CỐ ĐỊNH — món ăn phải được CHỈNH SỬA để phù hợp với nền (về tỷ lệ, phối cảnh, ánh sáng), KHÔNG BAO GIỜ ngược lại. Tưởng tượng bạn đang CHỤP ẢNH THẬT món ăn trong bối cảnh đó.` : '';
+    BƯỚC 1 - PHÂN TÍCH NỀN: Xác định không gian (nhà hàng, quán ăn, bếp...), bề mặt (mặt bàn, quầy...), chất liệu, màu sắc chủ đạo, hướng ánh sáng, nhiệt độ màu.
+    
+    BƯỚC 2 - BIẾN ĐỔI GÓC NHÌN CỦA NỀN (QUAN TRỌNG NHẤT):
+    KHÔNG giữ nguyên ảnh nền gốc. Hãy TÁI TẠO LẠI không gian nền từ góc nhìn CẬN BÀN ĂN:
+    - Zoom sát vào bề mặt đặt món (mặt bàn/quầy), góc chụp khoảng 30-45° từ trên xuống.
+    - Mặt bàn/bề mặt chiếm khoảng 60-70% diện tích ảnh, phần nền xa (ghế, tường, đèn...) chỉ mờ nhẹ phía sau làm bối cảnh.
+    - Giữ nguyên PHONG CÁCH & BẦU KHÔNG KHÍ của nền gốc (chất liệu bàn, tông màu, kiểu đèn, decor...) nhưng THAY ĐỔI góc nhìn để camera gần mặt bàn hơn.
+    
+    BƯỚC 3 - ĐẶT MÓN ĂN LÀM TRUNG TÂM:
+    - Món ăn nằm ở TRUNG TÂM khung hình, chiếm khoảng 40-55% diện tích ảnh — đủ lớn để thấy rõ chi tiết hấp dẫn.
+    - Đĩa/bát món ăn đặt trên bề mặt bàn với phối cảnh đúng, có bóng đổ tự nhiên.
+    - Tỷ lệ món ăn phải HỢP LÝ so với mặt bàn (không khổng lồ, không quá nhỏ) — như khi bạn ngồi ở bàn và chụp ảnh món ăn trước mặt.
+    
+    BƯỚC 4 - HÒA TRỘN ÁNH SÁNG & MÀU SẮC:
+    - Ánh sáng, bóng đổ, nhiệt độ màu trên món ăn PHẢI khớp với môi trường nền.
+    - Nếu nền có ánh đèn ấm → món ăn cũng phải có tone ấm tương ứng.
+    - Thêm bokeh tự nhiên cho phần nền phía xa để tạo độ sâu và tập trung vào món ăn.
+    
+    TÓM TẮT: Tưởng tượng bạn đang NGỒI TẠI BÀN trong không gian đó và CHỤP CẬN món ăn trước mặt bằng camera chuyên nghiệp. Nền phía sau mờ đẹp, món ăn sắc nét nổi bật ở giữa.` : '';
 
   const prompt = isProModel
     ? `
@@ -264,13 +276,13 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     Phong cách: ${settings.style} - thực hiện với độ chính xác và chi tiết tối đa.
     Ánh sáng: ${settings.lighting} - ánh sáng nhiều lớp, tạo chiều sâu và kịch tính.
     Góc máy: ${settings.angle} - bố cục hoàn hảo, cân bằng thị giác tuyệt đối.
-    Nền: ${settings.backgroundPrompt || (bgBase64 ? "Sử dụng ảnh nền đính kèm làm bối cảnh. Phân tích nền và đặt món ăn vào vị trí tự nhiên nhất với kích thước thực tế chính xác." : "Bối cảnh sang trọng, chi tiết tinh tế, phù hợp với nhà hàng 5 sao.")}.
+    Nền: ${settings.backgroundPrompt || (bgBase64 ? "Lấy cảm hứng từ ảnh nền đính kèm. TÁI TẠO không gian nền từ góc nhìn cận bàn ăn, zoom sát mặt bàn, để món ăn nổi bật ở trung tâm như ảnh chụp ẩm thực chuyên nghiệp." : "Bối cảnh sang trọng, chi tiết tinh tế, phù hợp với nhà hàng 5 sao.")}.
 ${bgAnalysisInstructions}
 ${sideDishPromptSection}
     Yêu cầu chất lượng PREMIUM:
     1. Tái tạo từng chi tiết kết cấu của món ăn: độ giòn, độ mịn, độ bóng, màu sắc tươi sáng hoàn hảo.
     2. Ánh sáng studio cao cấp với highlight và shadow tinh tế, tạo cảm giác 3D.
-    3. ${bgBase64 ? "QUAN TRỌNG: Giữ nguyên nền gốc, chỉ thêm món ăn vào với kích thước THỰC TẾ (đĩa thức ăn thường 20-30cm). Chỉnh màu sắc, ánh sáng, bóng đổ và phản chiếu trên món ăn để hoàn toàn khớp với môi trường nền. Món ăn phải trông như được chụp tại chỗ." : "Nền bokeh mượt mà, gradient tự nhiên, tạo sự tương phản hoàn hảo với món ăn."}
+    3. ${bgBase64 ? "QUAN TRỌNG: TÁI TẠO lại không gian nền từ góc chụp CẬN mặt bàn (30-45°). Giữ nguyên phong cách, chất liệu, tông màu, bầu không khí của nền gốc nhưng BIẾN ĐỔI góc nhìn để camera ở gần mặt bàn. Món ăn chiếm 40-55% khung hình ở trung tâm, nền phía sau mờ bokeh đẹp. Ánh sáng, bóng đổ, nhiệt độ màu trên món ăn khớp hoàn toàn với không gian." : "Nền bokeh mượt mà, gradient tự nhiên, tạo sự tương phản hoàn hảo với món ăn."}
     4. Độ sâu trường ảnh chọn lọc, làm nổi bật điểm nhấn của món ăn.
     5. Màu sắc sống động, bão hòa hợp lý, trông ngon miệng và hấp dẫn tột đỉnh.
     6. Chất lượng ảnh đầu ra cực nét, không noise, đạt chuẩn in ấn thương mại.
@@ -282,13 +294,13 @@ ${sideDishPromptSection}
     Phong cách: ${settings.style}.
     Ánh sáng: ${settings.lighting}.
     Góc máy: ${settings.angle}.
-    Nền: ${settings.backgroundPrompt || (bgBase64 ? "Sử dụng ảnh nền đính kèm làm bối cảnh. Phân tích nền và đặt món ăn vào vị trí tự nhiên nhất với kích thước thực tế chính xác." : "Một bối cảnh nhà hàng chuyên nghiệp làm nổi bật món ăn.")}.
+    Nền: ${settings.backgroundPrompt || (bgBase64 ? "Lấy cảm hứng từ ảnh nền đính kèm. TÁI TẠO không gian nền từ góc nhìn cận bàn ăn, zoom sát mặt bàn, để món ăn nổi bật ở trung tâm như ảnh chụp ẩm thực chuyên nghiệp." : "Một bối cảnh nhà hàng chuyên nghiệp làm nổi bật món ăn.")}.
 ${bgAnalysisInstructions}
 ${sideDishPromptSection}
     Hướng dẫn:
     1. Tinh chỉnh vẻ ngoài của món ăn để trông hấp dẫn, tươi ngon và cao cấp hơn.
     2. Tăng cường màu sắc, kết cấu và vùng sáng.
-    3. ${bgBase64 ? "QUAN TRỌNG: Giữ nguyên nền gốc, chỉ thêm món ăn vào với kích thước THỰC TẾ phù hợp với các vật thể trong nền. Chỉnh ánh sáng, bóng đổ, nhiệt độ màu trên món ăn để khớp hoàn toàn với môi trường nền. Món ăn phải trông như được chụp tại chỗ, KHÔNG được to quá cỡ." : "Tạo một hình nền chân thực, chất lượng cao."}
+    3. ${bgBase64 ? "QUAN TRỌNG: TÁI TẠO lại không gian nền từ góc chụp CẬN mặt bàn (30-45°). Giữ nguyên phong cách, chất liệu, tông màu của nền gốc nhưng BIẾN ĐỔI góc nhìn để camera ở gần mặt bàn. Món ăn chiếm 40-55% khung hình ở trung tâm, nền phía sau mờ bokeh đẹp. Ánh sáng và nhiệt độ màu trên món ăn khớp với không gian." : "Tạo một hình nền chân thực, chất lượng cao."}
     4. Đảm bảo ánh sáng chất lượng studio chuyên nghiệp và độ sâu trường ảnh.
     5. Xuất ra một bức ảnh món ăn thương mại, sắc nét.
     `;

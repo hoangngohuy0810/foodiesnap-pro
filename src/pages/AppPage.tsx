@@ -272,19 +272,19 @@ export default function AppPage() {
             let foodBase64 = await fileToBase64(foodImage);
             foodBase64 = await cropToAspectRatio(foodBase64, activeSettings.aspectRatio);
 
-            let bgBase64 = (!useQuickSettings && bgImage) ? await fileToBase64(bgImage) : null;
+            let bgBase64 = bgImage ? await fileToBase64(bgImage) : null;
             if (bgBase64) {
                 bgBase64 = await cropToAspectRatio(bgBase64, activeSettings.aspectRatio);
             }
             const token = await getIdToken();
 
-            const sideDishesData = !useQuickSettings ? await Promise.all(
+            const sideDishesData = await Promise.all(
                 sideDishes.map(async (d) => ({
                     base64: await fileToBase64(d.file),
                     mimeType: d.file.type || 'image/png',
                     description: d.description,
                 }))
-            ) : [];
+            );
 
             const response = await fetch('/api/generate', {
                 method: 'POST',
@@ -589,9 +589,14 @@ export default function AppPage() {
                                     {isQuickMode ? (
                                         <QuickModePanel
                                             foodPreview={foodPreview}
+                                            bgPreview={bgPreview}
                                             settings={foodSettings}
                                             onFoodChange={(e) => handleFileChange(e, 'food')}
                                             onFoodClear={() => { setFoodImage(null); setFoodPreview(null); }}
+                                            onBgChange={(e) => handleFileChange(e, 'bg')}
+                                            onBgClear={() => { setBgImage(null); setBgPreview(null); }}
+                                            sideDishes={sideDishes}
+                                            onSideDishesChange={setSideDishes}
                                             isGenerating={isFoodGenerating}
                                             isLoggedIn={!!user}
                                             credits={credits}
