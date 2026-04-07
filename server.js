@@ -1,3 +1,4 @@
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -1092,6 +1093,6 @@ app.get('*', (_req, res) => {
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`Server frontend & backend đang chạy tại cổng http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server frontend & backend đang chạy tại cổng http://0.0.0.0:${PORT}`);
 });
