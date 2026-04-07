@@ -17,7 +17,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Product } from '../types';
 import { listProducts, createProduct, updateProduct, deleteProduct } from '../lib/productService';
-import BrandProfilePanel from '../components/app/BrandProfilePanel';
+import BrandProfileForm from '../components/app/BrandProfileForm';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -645,18 +645,21 @@ export default function DashboardPage() {
 
                 {/* ── Brand Profile Tab ── */}
                 {activeTab === 'brand-profile' && (
-                    <div className="max-w-2xl">
+                    <div className="space-y-6">
                         <div className="mb-5">
                             <h2 className="text-lg font-semibold">Hồ sơ quán</h2>
                             <p className="text-xs text-gray-400 mt-0.5">
-                                Thiết lập 1 lần — tự động điền vào banner, logo, mô tả mỗi khi tạo thiết kế.
+                                Quản lý thông tin thương hiệu của bạn. Thiết lập 1 lần — tự động điền vào thiết kế AI.
                             </p>
                         </div>
-                        <BrandProfilePanel
-                            userId={user.uid}
-                            brandProfile={userProfile?.brandProfile}
-                            initialOpen={true}
-                        />
+
+                        {/* We use a dedicated, spacious form for the Dashboard instead of the compact accordion panel */}
+                        <div className="glass-card rounded-2xl p-6 lg:p-8">
+                            <BrandProfileForm
+                                userId={user.uid}
+                                brandProfile={userProfile?.brandProfile}
+                            />
+                        </div>
                     </div>
                 )}
 
