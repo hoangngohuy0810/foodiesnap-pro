@@ -1092,6 +1092,354 @@ app.get('/api/download-image', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 12d. POST /api/generate/creative — Creative mode (no reference image needed)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CREATIVE_BASE_CREDIT_COST = 4; // 4 credits per banner at 1K (premium model)
+const CREATIVE_QUALITY_MULTIPLIER = { '1K': 1, '2K': 2, '4K': 4 };
+
+const BANNER_PURPOSE_PROMPT_MAP = {
+  'promo': 'PURPOSE: Promotional / Sale banner. Optimize for urgency and conversion — large discount numbers, bold CTA, eye-catching sale badges, countdown feel.',
+  'new-product': 'PURPOSE: New product launch banner. Focus on product showcase — hero product placement, "NEW" badge, clean and premium presentation, excitement.',
+  'event': 'PURPOSE: Event announcement banner. Highlight event name, date/time, venue. Use dynamic composition with energy and anticipation.',
+  'facebook-post': 'PURPOSE: Facebook post format. Optimized for social media engagement — thumb-stopping design, clear message readable at small size, social-friendly composition.',
+  'story': 'PURPOSE: Story format (vertical 9:16). Full-screen immersive design — bold vertical typography, swipe-up CTA area at bottom, mobile-first layout.',
+};
+
+// Creative styles (no "Sao chép chính xác" since there's no reference)
+const CREATIVE_STYLES = [
+  'Hiện đại & Tối giản',
+  'Nổi bật & Sống động',
+  'Sang trọng & Thanh lịch',
+  'Sáng tạo phá cách',
+  'Chuyên nghiệp & Thương mại',
+];
+
+app.post('/api/generate/creative', generateLimiter, verifyToken, async (req, res) => {
+  let { bannerTitle, industry, purpose, brandDescription, promoInfo, userPrompt } = req.body;
+  const { productImages, brandColors, logo, settings } = req.body;
+
+  // Sanitize user-controlled text
+  const sanitizePromptText = (text, maxLen = 300) => {
+    if (!text || typeof text !== 'string') return '';
+    return text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').trim().slice(0, maxLen);
+  };
+  bannerTitle = sanitizePromptText(bannerTitle, 200);
+  industry = sanitizePromptText(industry, 100);
+  purpose = sanitizePromptText(purpose, 50);
+  brandDescription = sanitizePromptText(brandDescription, 300);
+  promoInfo = sanitizePromptText(promoInfo, 200);
+  userPrompt = sanitizePromptText(userPrompt, 300);
+
+  if (!bannerTitle && !brandDescription && !promoInfo) {
+    return res.status(400).json({ error: 'Vui lòng nhập tiêu đề banner hoặc mô tả thương hiệu.' });
+  }
+
+  const quantity = Math.min(Math.max(parseInt(String(settings?.quantity)) || 1, 1), 5);
+  const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
+  const isAdmin = req.user.email === ADMIN_EMAIL;
+  const userRef = db.collection('users').doc(req.user.uid);
+  const userDoc = await userRef.get();
+  if (!userDoc.exists) return res.status(403).json({ error: 'Tài khoản không tồn tại' });
+
+  const qualityMul = CREATIVE_QUALITY_MULTIPLIER[settings?.quality] || 1;
+  const creditPerBanner = CREATIVE_BASE_CREDIT_COST * qualityMul;
+  const totalCost = creditPerBanner * quantity;
+
+  if (!isAdmin) {
+    const currentCredits = userDoc.data()?.credits ?? 0;
+    if (currentCredits < totalCost) {
+      return res.status(402).json({
+        error: 'INSUFFICIENT_CREDITS',
+        creditsAvailable: currentCredits,
+        creditsRequired: totalCost,
+        message: `Bạn cần ${totalCost} credits để tạo ${quantity} banner. Hiện có ${currentCredits} credit.`,
+      });
+    }
+    await userRef.update({ credits: FieldValue.increment(-totalCost) });
+  }
+
+  // Auto-sync industry to brand profile if provided
+  if (industry && industry.trim()) {
+    try {
+      const currentProfile = userDoc.data()?.brandProfile || {};
+      if (!currentProfile.industry || currentProfile.industry !== industry.trim()) {
+        await userRef.update({ 'brandProfile.industry': industry.trim() });
+        console.log(`[Creative] Synced industry "${industry}" to brand profile for ${req.user.uid}`);
+      }
+    } catch (e) { console.error('[Creative] Industry sync error:', e); }
+  }
+
+  const typoInstruction = TYPO_PROMPT_MAP[settings?.typography] || TYPO_PROMPT_MAP['Tự động'];
+  const purposeInstruction = BANNER_PURPOSE_PROMPT_MAP[purpose] || BANNER_PURPOSE_PROMPT_MAP['promo'];
+
+  try {
+    const tasks = Array.from({ length: quantity }, (_, i) => {
+      const style = CREATIVE_STYLES[i % CREATIVE_STYLES.length];
+
+      // Build color palette instruction
+      const colorPalette = Array.isArray(brandColors) && brandColors.length > 0
+        ? `COLOR PALETTE: Use these brand colors as the primary palette: ${brandColors.join(', ')}. The first color (${brandColors[0]}) is the primary brand color.`
+        : 'COLOR PALETTE: Choose a professional, commercially appealing color palette that suits the industry and purpose.';
+
+      const promptText = `
+    ROLE: World-class AI Graphic Designer & Art Director with 20 years of experience creating award-winning advertising campaigns.
+    TASK: Create a professional, high-converting advertising banner FROM SCRATCH — no reference image provided.
+
+    ${purposeInstruction}
+
+    BANNER TITLE / HEADLINE: "${bannerTitle || 'Create an impactful headline based on the context below'}"
+    ${industry ? `INDUSTRY / BUSINESS TYPE: ${industry}` : ''}
+    ${brandDescription ? `BRAND DESCRIPTION: "${brandDescription}"` : ''}
+    ${promoInfo ? `PROMOTIONAL INFO: "${promoInfo}"` : ''}
+
+    STYLE BLUEPRINT:
+    1. DESIGN STYLE: "${style}" — This defines the overall visual language.
+    2. ${colorPalette}
+    3. VISUAL SYSTEM:
+       - Professional commercial photography lighting and shadows
+       - Premium gradient backgrounds with depth and dimension
+       - Clean negative space for visual breathing room
+       - Modern glass-morphism / frosted effects where appropriate
+       - Subtle texture overlays for richness
+    4. LAYOUT COMPOSITION:
+       - Strong visual hierarchy: Hero element → Headline → Supporting text → CTA
+       - Follow the Rule of Thirds for balanced composition
+       - Ensure the banner reads well at both large and thumbnail sizes
+    5. TYPOGRAPHY & COPYWRITING:
+       - ${typoInstruction}
+       - ALL text must be PERFECTLY LEGIBLE and SPELLED CORRECTLY
+       - Use maximum 3 font sizes for clear hierarchy
+       - Headlines should be punchy, action-oriented
+       - If promo info exists, make discount/offer numbers visually dominant
+       ${userPrompt ? `- User's Custom Wishlist: ${userPrompt}` : ''}
+
+    ${productImages?.length > 0 ? `PRODUCT ASSETS: ${productImages.length} product image(s) are attached. Feature them prominently as the hero elements. Match lighting, shadows, and perspective naturally within the composition.` : 'NO PRODUCT IMAGES PROVIDED: Generate or illustrate appropriate visual elements that represent the industry/brand. Use photorealistic style.'}
+
+    ${logo ? 'LOGO: A brand logo is attached. Integrate it tastefully — typically top-left or bottom-center, at a size that is visible but not overpowering.' : ''}
+
+    CRITICAL RULES:
+    - Output ONE single, complete, high-quality banner image
+    - The banner must look like it was designed by a top-tier agency
+    - Ensure 60/30/10 color rule for visual harmony
+    - NO placeholder text — every word must be intentional and meaningful
+    - Text must be in the same language as the input (Vietnamese if input is Vietnamese)
+      `;
+
+      const parts = [{ text: promptText }];
+
+      // Add product images if provided
+      if (Array.isArray(productImages) && productImages.length > 0) {
+        productImages.forEach((prod) => {
+          parts.push({ inlineData: { mimeType: getMimeTypeBanner(prod), data: cleanBase64Banner(prod) } });
+        });
+      }
+
+      // Add logo if provided
+      if (logo && typeof logo === 'string' && logo.startsWith('data:')) {
+        parts.push({ inlineData: { mimeType: getMimeTypeBanner(logo), data: cleanBase64Banner(logo) } });
+      }
+
+      return callGeminiBanner(parts, settings?.aspectRatio, settings?.quality)
+        .then((base64) => ({ base64, style, success: true }))
+        .catch((err) => ({ error: err.message, style, success: false }));
+    });
+
+    const results = await Promise.all(tasks);
+    const successful = results.filter(r => r.success);
+    const failedCount = results.filter(r => !r.success).length;
+
+    // Refund failed
+    if (!isAdmin && failedCount > 0) {
+      const refund = failedCount * creditPerBanner;
+      await userRef.update({ credits: FieldValue.increment(refund) });
+      console.log(`[Creative] Hoàn ${refund} credits cho ${req.user.uid}`);
+    }
+
+    // Save successful banners to Firebase Storage + Firestore
+    const savedResults = [];
+    for (const r of successful) {
+      try {
+        const rawB64 = r.base64.replace(/^data:image\/\w+;base64,/, '');
+        const imgBuffer = Buffer.from(rawB64, 'base64');
+        const fileId = `users/${req.user.uid}/banners/${Date.now()}-${crypto.randomUUID().substring(0, 8)}.png`;
+        const file = bucket.file(fileId);
+        const storageToken = crypto.randomUUID();
+        await file.save(imgBuffer, {
+          metadata: { contentType: 'image/png', metadata: { firebaseStorageDownloadTokens: storageToken } }
+        });
+        const imgUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileId)}?alt=media&token=${storageToken}`;
+        savedResults.push({ url: imgUrl, style: r.style, base64: r.base64 });
+      } catch (e) {
+        console.error('[Creative] Error saving to storage:', e);
+        savedResults.push({ url: r.base64, style: r.style, base64: r.base64 });
+      }
+    }
+
+    // Save metadata to Firestore
+    if (savedResults.length > 0 && db) {
+      try {
+        await Promise.all([
+          db.collection('generations').add({
+            userId: req.user.uid,
+            timestamp: Date.now(),
+            count: savedResults.length,
+            type: 'banner',
+            bannerTypography: settings?.typography || 'Tự động',
+            settings: {
+              aspectRatio: settings?.aspectRatio || '3:4',
+              quality: settings?.quality || '1K',
+              mode: 'creative',
+              purpose: purpose || 'promo',
+            },
+            styles: savedResults.map(r => r.style),
+            images: savedResults.map(r => r.url),
+          }),
+          userRef.update({ totalGenerated: FieldValue.increment(savedResults.length) }),
+        ]);
+      } catch (e) { console.error('[Creative] Firestore save error:', e); }
+    }
+
+    console.log(`[Creative] Tạo ${successful.length}/${quantity} banner thành công.`);
+    res.json({
+      images: savedResults.map(r => ({ base64: r.base64, style: r.style, url: r.url })),
+      creditsUsed: (quantity - failedCount) * creditPerBanner,
+      ...(failedCount > 0 && { warning: `${failedCount}/${quantity} ảnh bị lỗi và đã được hoàn credit.` }),
+    });
+  } catch (err) {
+    if (!isAdmin) {
+      try { await userRef.update({ credits: FieldValue.increment(totalCost) }); } catch { }
+    }
+    console.error('[Creative] Error:', err);
+    res.status(500).json({ error: err.message || 'Lỗi server khi tạo banner.' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 15. PRODUCT CATALOG CRUD
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// 15a. GET /api/products — List all products for current user
+app.get('/api/products', verifyToken, async (req, res) => {
+  try {
+    const snap = await db.collection('users').doc(req.user.uid)
+      .collection('products').orderBy('createdAt', 'desc').limit(50).get();
+    const products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    res.json({ products });
+  } catch (err) {
+    console.error('[Products] List error:', err);
+    res.status(500).json({ error: 'Không thể tải danh sách sản phẩm.' });
+  }
+});
+
+// 15b. POST /api/products — Create a new product
+app.post('/api/products', verifyToken, async (req, res) => {
+  const { name, description, price, category, image } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Tên sản phẩm không được để trống.' });
+  }
+
+  try {
+    // If image is base64, save to Firebase Storage
+    let imageUrl = image || '';
+    if (image && image.startsWith('data:')) {
+      const rawB64 = image.replace(/^data:(image\/\w+|application\/\w+);base64,/, '');
+      const imgBuffer = Buffer.from(rawB64, 'base64');
+      const fileId = `users/${req.user.uid}/products/${Date.now()}-${crypto.randomUUID().substring(0, 8)}.png`;
+      const file = bucket.file(fileId);
+      const storageToken = crypto.randomUUID();
+      await file.save(imgBuffer, {
+        metadata: { contentType: 'image/png', metadata: { firebaseStorageDownloadTokens: storageToken } }
+      });
+      imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileId)}?alt=media&token=${storageToken}`;
+    }
+
+    const productData = {
+      name: (name || '').trim().slice(0, 100),
+      description: (description || '').trim().slice(0, 300),
+      price: (price || '').trim().slice(0, 50),
+      category: (category || '').trim().slice(0, 50),
+      image: imageUrl,
+      createdAt: Date.now(),
+    };
+
+    const docRef = await db.collection('users').doc(req.user.uid)
+      .collection('products').add(productData);
+
+    res.json({ product: { id: docRef.id, ...productData } });
+  } catch (err) {
+    console.error('[Products] Create error:', err);
+    res.status(500).json({ error: 'Không thể tạo sản phẩm.' });
+  }
+});
+
+// 15c. PUT /api/products/:id — Update a product
+app.put('/api/products/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, description, price, category, image } = req.body;
+
+  try {
+    const docRef = db.collection('users').doc(req.user.uid).collection('products').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Sản phẩm không tồn tại.' });
+
+    // If new image is base64, save to Firebase Storage
+    let imageUrl = image;
+    if (image && image.startsWith('data:')) {
+      const rawB64 = image.replace(/^data:(image\/\w+|application\/\w+);base64,/, '');
+      const imgBuffer = Buffer.from(rawB64, 'base64');
+      const fileId = `users/${req.user.uid}/products/${Date.now()}-${crypto.randomUUID().substring(0, 8)}.png`;
+      const file = bucket.file(fileId);
+      const storageToken = crypto.randomUUID();
+      await file.save(imgBuffer, {
+        metadata: { contentType: 'image/png', metadata: { firebaseStorageDownloadTokens: storageToken } }
+      });
+      imageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileId)}?alt=media&token=${storageToken}`;
+    }
+
+    const updates = {};
+    if (name !== undefined) updates.name = (name || '').trim().slice(0, 100);
+    if (description !== undefined) updates.description = (description || '').trim().slice(0, 300);
+    if (price !== undefined) updates.price = (price || '').trim().slice(0, 50);
+    if (category !== undefined) updates.category = (category || '').trim().slice(0, 50);
+    if (imageUrl !== undefined) updates.image = imageUrl;
+
+    await docRef.update(updates);
+    const updated = await docRef.get();
+    res.json({ product: { id: updated.id, ...updated.data() } });
+  } catch (err) {
+    console.error('[Products] Update error:', err);
+    res.status(500).json({ error: 'Không thể cập nhật sản phẩm.' });
+  }
+});
+
+// 15d. DELETE /api/products/:id — Delete a product
+app.delete('/api/products/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const docRef = db.collection('users').doc(req.user.uid).collection('products').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Sản phẩm không tồn tại.' });
+
+    // Try to delete the image from Storage if it's a Firebase Storage URL
+    const imageUrl = doc.data()?.image;
+    if (imageUrl && imageUrl.includes('firebasestorage.googleapis.com')) {
+      try {
+        const filePath = decodeURIComponent(imageUrl.split('/o/')[1]?.split('?')[0] || '');
+        if (filePath) await bucket.file(filePath).delete().catch(() => { });
+      } catch { /* ignore storage delete errors */ }
+    }
+
+    await docRef.delete();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Products] Delete error:', err);
+    res.status(500).json({ error: 'Không thể xóa sản phẩm.' });
+  }
+});
+
 // 14. Phục vụ Frontend Vite React sau khi build
 app.use(express.static(path.join(__dirname, 'dist')));
 // SPA fallback - must be after API routes

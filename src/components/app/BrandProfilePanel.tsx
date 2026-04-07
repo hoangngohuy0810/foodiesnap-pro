@@ -12,6 +12,8 @@ import { cn } from '../../lib/utils';
 interface BrandProfilePanelProps {
     userId: string | undefined;
     brandProfile: BrandProfile | undefined;
+    /** If true, the panel starts expanded (default: false = collapsed) */
+    initialOpen?: boolean;
 }
 
 // ── Extract dominant colors from an image using Canvas ────────────────────────
@@ -70,8 +72,8 @@ async function extractColorsFromImage(dataUrl: string, count: number = 3): Promi
     });
 }
 
-export default function BrandProfilePanel({ userId, brandProfile }: BrandProfilePanelProps) {
-    const [isOpen, setIsOpen] = useState(false);
+export default function BrandProfilePanel({ userId, brandProfile, initialOpen = false }: BrandProfilePanelProps) {
+    const [isOpen, setIsOpen] = useState(initialOpen);
     const [profile, setProfile] = useState<BrandProfile>(brandProfile ?? DEFAULT_BRAND_PROFILE);
     const [isSaving, setIsSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -258,6 +260,19 @@ export default function BrandProfilePanel({ userId, brandProfile }: BrandProfile
                                     placeholder="VD: Quán Bún Bò Huế Cô Ba"
                                     className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
                                 />
+                            </div>
+
+                            {/* Industry */}
+                            <div>
+                                <label className="text-[10px] font-mono uppercase text-gray-400 mb-1 block">Ngành nghề</label>
+                                <input
+                                    type="text"
+                                    value={profile.industry}
+                                    onChange={(e) => set({ industry: e.target.value })}
+                                    placeholder="VD: Ẩm thực, Thời trang, Mỹ phẩm, Giáo dục..."
+                                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                                />
+                                <p className="text-[9px] text-gray-400 mt-0.5">Dùng khi tạo banner AI tự động — giúp AI hiểu phong cách phù hợp.</p>
                             </div>
 
                             {/* Description */}

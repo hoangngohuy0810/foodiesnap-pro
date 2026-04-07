@@ -148,6 +148,74 @@ export async function generateDesign(
 }
 
 /**
+ * Call backend to generate creative banner (no reference image needed)
+ */
+export async function generateCreativeBanner(
+    token: string,
+    bannerTitle: string,
+    industry: string,
+    purpose: string,
+    brandDescription: string,
+    promoInfo: string,
+    userPrompt: string,
+    productImages: string[],
+    brandColors: string[],
+    logo: string | null,
+    settings: BannerGenerationSettings
+): Promise<{ base64: string; style: string }[]> {
+    const res = await fetchWithTimeout(
+        '/api/generate/creative',
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                bannerTitle,
+                industry,
+                purpose,
+                brandDescription,
+                promoInfo,
+                userPrompt,
+                productImages,
+                brandColors,
+                logo,
+                settings: {
+                    aspectRatio: settings.aspectRatio,
+                    quality: settings.quality,
+                    typography: settings.typography,
+                    quantity: settings.quantity,
+                },
+            }),
+        }
+    );
+
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        if (errData.error === 'INSUFFICIENT_CREDITS') {
+            throw new Error(errData.message || 'Không đủ credits. Vui lòng mua thêm.');
+        }
+        if (res.status === 413) {
+            throw new Error('Dung lượng ảnh tải lên quá lớn. Vui lòng giảm kích thước ảnh.');
+        }
+        if (res.status === 429) {
+            throw new Error('Quá nhiều yêu cầu. Vui lòng thử lại sau vài phút.');
+        }
+        if (res.status >= 500) {
+            throw new Error(errData.error || 'Lỗi máy chủ khi tạo banner. Vui lòng thử lại.');
+        }
+        throw new Error(errData.error || 'Lỗi server khi tạo banner.');
+    }
+
+    const data = await res.json();
+    if (!data.images || data.images.length === 0) {
+        throw new Error('Server không trả về ảnh. Vui lòng thử lại.');
+    }
+    return data.images;
+}
+
+/**
  * Edit an existing banner with a natural language prompt
  */
 export async function editBanner(

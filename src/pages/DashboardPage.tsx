@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
     Coins, Sparkles,
     User, Camera, Loader2, RefreshCw, BarChart3,
     Receipt, CheckCircle2, Clock3, Package,
+    Plus, Pencil, Trash2, Image as ImageIcon, X, Store,
 } from 'lucide-react';
 import {
     collection, query, where, limit, getDocs,
@@ -14,6 +15,9 @@ import { updateProfile } from 'firebase/auth';
 import { db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { Product } from '../types';
+import { listProducts, createProduct, updateProduct, deleteProduct } from '../lib/productService';
+import BrandProfilePanel from '../components/app/BrandProfilePanel';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,7 +33,7 @@ interface CreditOrder {
     paidAt?: number;
 }
 
-type Tab = 'credit-history' | 'stats' | 'profile';
+type Tab = 'credit-history' | 'products' | 'brand-profile' | 'stats' | 'profile';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,6 +77,16 @@ export default function DashboardPage() {
     const [displayName, setDisplayName] = useState('');
     const [savingProfile, setSavingProfile] = useState(false);
 
+    // Products state
+    const [products, setProducts] = useState<Product[]>([]);
+    const [loadingProducts, setLoadingProducts] = useState(false);
+    const [showProductForm, setShowProductForm] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+    const [productForm, setProductForm] = useState({ name: '', description: '', price: '', category: '', image: '' });
+    const [savingProduct, setSavingProduct] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const productImageRef = useRef<HTMLInputElement>(null);
+
     useEffect(() => {
         if (!authLoading && !user) {
             navigate('/');
@@ -82,6 +96,9 @@ export default function DashboardPage() {
     useEffect(() => {
         if (user && activeTab === 'credit-history') {
             fetchOrders();
+        }
+        if (user && activeTab === 'products') {
+            fetchProducts();
         }
     }, [user, activeTab]);
 
@@ -127,6 +144,87 @@ export default function DashboardPage() {
         }
     };
 
+    // ── Product CRUD handlers ─────────────────────────────────────────────────
+
+    const getToken = async () => {
+        if (!user) throw new Error('Not logged in');
+        return user.getIdToken();
+    };
+
+    const fetchProducts = async () => {
+        setLoadingProducts(true);
+        try {
+            const token = await getToken();
+            const list = await listProducts(token);
+            setProducts(list);
+        } catch (e: any) {
+            showToast(e.message || 'Không thể tải sản phẩm.', 'error');
+        } finally {
+            setLoadingProducts(false);
+        }
+    };
+
+    const openProductForm = (product?: Product) => {
+        if (product) {
+            setEditingProduct(product);
+            setProductForm({ name: product.name, description: product.description, price: product.price, category: product.category, image: product.image });
+        } else {
+            setEditingProduct(null);
+            setProductForm({ name: '', description: '', price: '', category: '', image: '' });
+        }
+        setShowProductForm(true);
+    };
+
+    const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setProductForm(prev => ({ ...prev, image: reader.result as string }));
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleSaveProduct = async () => {
+        if (!productForm.name.trim()) {
+            showToast('Vui lòng nhập tên sản phẩm.', 'error');
+            return;
+        }
+        setSavingProduct(true);
+        try {
+            const token = await getToken();
+            if (editingProduct) {
+                const updated = await updateProduct(token, editingProduct.id, productForm);
+                setProducts(prev => prev.map(p => p.id === updated.id ? updated : p));
+                showToast('Cập nhật sản phẩm thành công!', 'success');
+            } else {
+                const created = await createProduct(token, productForm);
+                setProducts(prev => [created, ...prev]);
+                showToast('Thêm sản phẩm thành công!', 'success');
+            }
+            setShowProductForm(false);
+        } catch (e: any) {
+            showToast(e.message || 'Lỗi khi lưu sản phẩm.', 'error');
+        } finally {
+            setSavingProduct(false);
+        }
+    };
+
+    const handleDeleteProduct = async (id: string) => {
+        if (!confirm('Bạn có chắc muốn xóa sản phẩm này?')) return;
+        setDeletingId(id);
+        try {
+            const token = await getToken();
+            await deleteProduct(token, id);
+            setProducts(prev => prev.filter(p => p.id !== id));
+            showToast('Đã xóa sản phẩm.', 'success');
+        } catch (e: any) {
+            showToast(e.message || 'Không thể xóa sản phẩm.', 'error');
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     if (authLoading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
@@ -144,6 +242,8 @@ export default function DashboardPage() {
 
     const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
         { id: 'credit-history', label: 'Lịch sử nạp credit', icon: Receipt },
+        { id: 'brand-profile', label: 'Hồ sơ quán', icon: Store },
+        { id: 'products', label: 'Sản phẩm', icon: Package },
         { id: 'stats', label: 'Thống kê', icon: BarChart3 },
         { id: 'profile', label: 'Hồ sơ', icon: User },
     ];
@@ -336,6 +436,227 @@ export default function DashboardPage() {
                                 )}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* ── Products Tab ── */}
+                {activeTab === 'products' && (
+                    <div>
+                        <div className="flex items-center justify-between mb-5">
+                            <div>
+                                <h2 className="text-lg font-semibold">Kho sản phẩm</h2>
+                                <p className="text-xs text-gray-400 mt-0.5">
+                                    Lưu sản phẩm để dùng nhanh khi tạo banner ({products.length}/50)
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={fetchProducts}
+                                    disabled={loadingProducts}
+                                    className="p-2 text-gray-400 hover:text-brand-orange transition-colors disabled:opacity-40"
+                                    title="Tải lại"
+                                >
+                                    <RefreshCw size={16} className={loadingProducts ? 'animate-spin' : ''} />
+                                </button>
+                                <button
+                                    onClick={() => openProductForm()}
+                                    className="btn-primary flex items-center gap-1.5 text-sm !py-2 !px-3"
+                                >
+                                    <Plus size={14} />
+                                    Thêm SP
+                                </button>
+                            </div>
+                        </div>
+
+                        {loadingProducts ? (
+                            <div className="h-60 flex items-center justify-center">
+                                <Loader2 size={28} className="animate-spin text-brand-orange" />
+                            </div>
+                        ) : products.length === 0 ? (
+                            <div className="h-60 border-2 border-dashed border-gray-200 rounded-3xl flex flex-col items-center justify-center text-gray-400 space-y-3">
+                                <Package size={36} className="opacity-30" />
+                                <p className="font-medium">Chưa có sản phẩm nào</p>
+                                <p className="text-xs text-center max-w-xs">Thêm sản phẩm để chọn nhanh khi tạo banner ở chế độ "Tạo Mới"</p>
+                                <button onClick={() => openProductForm()} className="btn-primary text-sm">
+                                    <Plus size={14} className="inline mr-1" />
+                                    Thêm sản phẩm đầu tiên
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                {products.map((product, i) => (
+                                    <motion.div
+                                        key={product.id}
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ delay: i * 0.03 }}
+                                        className="glass-card rounded-2xl overflow-hidden group"
+                                    >
+                                        {/* Image */}
+                                        <div className="aspect-square bg-gray-50 relative overflow-hidden">
+                                            {product.image ? (
+                                                <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                    <ImageIcon size={32} className="text-gray-200" />
+                                                </div>
+                                            )}
+                                            {/* Overlay actions */}
+                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                                                <button
+                                                    onClick={() => openProductForm(product)}
+                                                    className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-gray-700 hover:text-brand-orange shadow-lg transition-colors"
+                                                    title="Sửa"
+                                                >
+                                                    <Pencil size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteProduct(product.id)}
+                                                    disabled={deletingId === product.id}
+                                                    className="w-8 h-8 bg-white rounded-full flex items-center justify-center text-gray-700 hover:text-red-500 shadow-lg transition-colors disabled:opacity-50"
+                                                    title="Xóa"
+                                                >
+                                                    {deletingId === product.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {/* Info */}
+                                        <div className="p-3 space-y-0.5">
+                                            <p className="text-sm font-semibold text-gray-800 truncate">{product.name}</p>
+                                            {product.price && <p className="text-xs font-bold text-brand-orange">{product.price}</p>}
+                                            {product.category && <p className="text-[10px] text-gray-400">{product.category}</p>}
+                                            {product.description && <p className="text-[10px] text-gray-400 line-clamp-2">{product.description}</p>}
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Product Form Modal */}
+                        {showProductForm && (
+                            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowProductForm(false)}>
+                                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-bold text-gray-700">
+                                            {editingProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}
+                                        </h3>
+                                        <button onClick={() => setShowProductForm(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+
+                                    {/* Image upload */}
+                                    <div>
+                                        <label className="text-xs font-mono uppercase text-gray-400 mb-1 block">Ảnh sản phẩm</label>
+                                        <div
+                                            onClick={() => productImageRef.current?.click()}
+                                            className="w-full h-32 border-2 border-dashed border-gray-200 rounded-xl flex items-center justify-center cursor-pointer hover:border-brand-orange/50 transition-all overflow-hidden bg-gray-50"
+                                        >
+                                            {productForm.image ? (
+                                                <img src={productForm.image} alt="Preview" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="text-center text-gray-400">
+                                                    <ImageIcon size={24} className="mx-auto mb-1" />
+                                                    <p className="text-xs">Nhấn để tải ảnh</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <input ref={productImageRef} type="file" accept="image/*" className="hidden" onChange={handleProductImageUpload} />
+                                        {productForm.image && (
+                                            <button
+                                                onClick={() => setProductForm(prev => ({ ...prev, image: '' }))}
+                                                className="text-[10px] text-red-500 hover:text-red-600 mt-1"
+                                            >
+                                                Xóa ảnh
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Name */}
+                                    <div>
+                                        <label className="text-xs font-mono uppercase text-gray-400 mb-1 block">Tên sản phẩm *</label>
+                                        <input
+                                            type="text"
+                                            value={productForm.name}
+                                            onChange={e => setProductForm(prev => ({ ...prev, name: e.target.value }))}
+                                            placeholder="VD: Bún bò Huế đặc biệt"
+                                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                                        />
+                                    </div>
+
+                                    {/* Price + Category */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-xs font-mono uppercase text-gray-400 mb-1 block">Giá</label>
+                                            <input
+                                                type="text"
+                                                value={productForm.price}
+                                                onChange={e => setProductForm(prev => ({ ...prev, price: e.target.value }))}
+                                                placeholder="VD: 59.000đ"
+                                                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-mono uppercase text-gray-400 mb-1 block">Danh mục</label>
+                                            <input
+                                                type="text"
+                                                value={productForm.category}
+                                                onChange={e => setProductForm(prev => ({ ...prev, category: e.target.value }))}
+                                                placeholder="VD: Món chính"
+                                                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Description */}
+                                    <div>
+                                        <label className="text-xs font-mono uppercase text-gray-400 mb-1 block">Mô tả</label>
+                                        <textarea
+                                            value={productForm.description}
+                                            onChange={e => setProductForm(prev => ({ ...prev, description: e.target.value }))}
+                                            placeholder="Mô tả ngắn về sản phẩm..."
+                                            rows={2}
+                                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange/20 resize-none"
+                                        />
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-2 pt-1">
+                                        <button
+                                            onClick={() => setShowProductForm(false)}
+                                            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                                        >
+                                            Hủy
+                                        </button>
+                                        <button
+                                            onClick={handleSaveProduct}
+                                            disabled={savingProduct || !productForm.name.trim()}
+                                            className="flex-1 btn-primary flex items-center justify-center gap-2 !py-2.5 text-sm"
+                                        >
+                                            {savingProduct && <Loader2 size={14} className="animate-spin" />}
+                                            {editingProduct ? 'Cập nhật' : 'Thêm'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ── Brand Profile Tab ── */}
+                {activeTab === 'brand-profile' && (
+                    <div className="max-w-2xl">
+                        <div className="mb-5">
+                            <h2 className="text-lg font-semibold">Hồ sơ quán</h2>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                                Thiết lập 1 lần — tự động điền vào banner, logo, mô tả mỗi khi tạo thiết kế.
+                            </p>
+                        </div>
+                        <BrandProfilePanel
+                            userId={user.uid}
+                            brandProfile={userProfile?.brandProfile}
+                            initialOpen={true}
+                        />
                     </div>
                 )}
 

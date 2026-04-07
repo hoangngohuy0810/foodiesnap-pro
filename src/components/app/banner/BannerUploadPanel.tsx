@@ -228,6 +228,12 @@ interface BannerUploadPanelProps {
     onPromoInfoChange: (v: string) => void;
     prompt: string;
     onPromptChange: (v: string) => void;
+    // Creative mode props
+    bannerTitle?: string;
+    onBannerTitleChange?: (v: string) => void;
+    industry?: string;
+    onIndustryChange?: (v: string) => void;
+    onOpenProductPicker?: () => void;
 }
 
 export default function BannerUploadPanel({
@@ -244,62 +250,142 @@ export default function BannerUploadPanel({
     onPromoInfoChange,
     prompt,
     onPromptChange,
+    bannerTitle,
+    onBannerTitleChange,
+    industry,
+    onIndustryChange,
+    onOpenProductPicker,
 }: BannerUploadPanelProps) {
+    const isCreative = mode === 'creative';
+
     return (
         <section className="glass-card p-4 rounded-2xl space-y-3">
-            {/* Upload Section */}
-            <div className="space-y-2.5">
-                <MultiImageUpload
-                    label="Mẫu thiết kế (Reference)"
-                    description="Tải lên mẫu banner bạn muốn học theo"
-                    images={referenceImages}
-                    onImagesChange={onReferenceImagesChange}
-                />
+            {isCreative ? (
+                /* ── Creative Mode UI ── */
+                <div className="space-y-2.5">
+                    {/* Info banner */}
+                    <div className="bg-purple-50 border border-purple-100 p-2 rounded-lg text-[9px] text-purple-700 leading-relaxed">
+                        <span className="font-bold">✨ Chế độ Tạo Mới:</span> Mô tả ý tưởng banner — AI sẽ thiết kế từ đầu mà không cần ảnh tham chiếu.
+                    </div>
 
-                {mode === 'clone' ? (
-                    <MultiImageUpload
-                        label="Sản phẩm (Assets)"
-                        description="Tải lên ảnh sản phẩm cần ghép"
-                        images={productImages}
-                        onImagesChange={onProductImagesChange}
+                    {/* Banner Title */}
+                    <CompactTextInput
+                        label="Tiêu đề banner *"
+                        value={bannerTitle ?? ''}
+                        onChange={onBannerTitleChange ?? (() => { })}
+                        placeholder="VD: Flash Sale Cuối Tuần, Khai Trương Chi Nhánh Mới..."
                     />
-                ) : (
+
+                    {/* Industry */}
+                    <CompactTextInput
+                        label="Ngành nghề"
+                        value={industry ?? ''}
+                        onChange={onIndustryChange ?? (() => { })}
+                        placeholder="VD: Ẩm thực, Thời trang, Mỹ phẩm..."
+                    />
+
+                    {/* Product Images (optional) */}
                     <div>
-                        <div className="bg-purple-50 border border-purple-100 p-1.5 rounded-lg mb-1.5 text-[8px] text-purple-700">
-                            AI sẽ tự đọc thông tin từ file bạn tải lên (PDF, Ảnh) để tạo nội dung.
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] font-mono uppercase text-gray-400">
+                                Ảnh sản phẩm (Tùy chọn)
+                            </label>
+                            {onOpenProductPicker && (
+                                <button
+                                    type="button"
+                                    onClick={onOpenProductPicker}
+                                    className="text-[9px] text-purple-500 hover:text-purple-700 font-semibold transition-colors"
+                                >
+                                    📦 Chọn từ kho SP
+                                </button>
+                            )}
                         </div>
                         <MultiImageUpload
-                            label="File Thông Tin (Info Source)"
-                            description="Tải lên PDF hoặc Ảnh chứa thông tin"
-                            images={infoFiles}
-                            onImagesChange={onInfoFilesChange}
-                            accept="image/*,application/pdf"
+                            label=""
+                            description="Tải ảnh sản phẩm lên (hoặc để trống — AI sẽ tự vẽ)"
+                            images={productImages}
+                            onImagesChange={onProductImagesChange}
                         />
                     </div>
-                )}
-            </div>
 
-            {/* Compact Text Inputs with expand buttons */}
-            <div className="space-y-2">
-                <CompactTextInput
-                    label="Mô tả thương hiệu"
-                    value={brandDescription}
-                    onChange={onBrandDescriptionChange}
-                    placeholder="VD: Thương hiệu thời trang cao cấp..."
-                />
-                <CompactTextInput
-                    label="Thông tin khuyến mãi (Tùy chọn)"
-                    value={promoInfo}
-                    onChange={onPromoInfoChange}
-                    placeholder="VD: Giảm 50%, Mua 1 tặng 1..."
-                />
-                <CompactTextInput
-                    label="Yêu cầu tùy chỉnh (Tùy chọn)"
-                    value={prompt}
-                    onChange={onPromptChange}
-                    placeholder="VD: Đổi nền xanh, thêm chữ..."
-                />
-            </div>
+                    {/* Text Inputs */}
+                    <CompactTextInput
+                        label="Mô tả thương hiệu"
+                        value={brandDescription}
+                        onChange={onBrandDescriptionChange}
+                        placeholder="VD: Quán cà phê sân vườn, phong cách vintage..."
+                    />
+                    <CompactTextInput
+                        label="Thông tin khuyến mãi (Tùy chọn)"
+                        value={promoInfo}
+                        onChange={onPromoInfoChange}
+                        placeholder="VD: Giảm 50%, Combo 99K, Free ship..."
+                    />
+                    <CompactTextInput
+                        label="Yêu cầu tùy chỉnh (Tùy chọn)"
+                        value={prompt}
+                        onChange={onPromptChange}
+                        placeholder="VD: Tone màu pastel, phong cách tối giản..."
+                    />
+                </div>
+            ) : (
+                /* ── Clone / Design Mode UI ── */
+                <>
+                    {/* Upload Section */}
+                    <div className="space-y-2.5">
+                        <MultiImageUpload
+                            label="Mẫu thiết kế (Reference)"
+                            description="Tải lên mẫu banner bạn muốn học theo"
+                            images={referenceImages}
+                            onImagesChange={onReferenceImagesChange}
+                        />
+
+                        {mode === 'clone' ? (
+                            <MultiImageUpload
+                                label="Sản phẩm (Assets)"
+                                description="Tải lên ảnh sản phẩm cần ghép"
+                                images={productImages}
+                                onImagesChange={onProductImagesChange}
+                            />
+                        ) : (
+                            <div>
+                                <div className="bg-purple-50 border border-purple-100 p-1.5 rounded-lg mb-1.5 text-[8px] text-purple-700">
+                                    AI sẽ tự đọc thông tin từ file bạn tải lên (PDF, Ảnh) để tạo nội dung.
+                                </div>
+                                <MultiImageUpload
+                                    label="File Thông Tin (Info Source)"
+                                    description="Tải lên PDF hoặc Ảnh chứa thông tin"
+                                    images={infoFiles}
+                                    onImagesChange={onInfoFilesChange}
+                                    accept="image/*,application/pdf"
+                                />
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Compact Text Inputs with expand buttons */}
+                    <div className="space-y-2">
+                        <CompactTextInput
+                            label="Mô tả thương hiệu"
+                            value={brandDescription}
+                            onChange={onBrandDescriptionChange}
+                            placeholder="VD: Thương hiệu thời trang cao cấp..."
+                        />
+                        <CompactTextInput
+                            label="Thông tin khuyến mãi (Tùy chọn)"
+                            value={promoInfo}
+                            onChange={onPromoInfoChange}
+                            placeholder="VD: Giảm 50%, Mua 1 tặng 1..."
+                        />
+                        <CompactTextInput
+                            label="Yêu cầu tùy chỉnh (Tùy chọn)"
+                            value={prompt}
+                            onChange={onPromptChange}
+                            placeholder="VD: Đổi nền xanh, thêm chữ..."
+                        />
+                    </div>
+                </>
+            )}
         </section>
     );
 }

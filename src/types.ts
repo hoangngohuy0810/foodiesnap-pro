@@ -7,6 +7,7 @@ export interface BrandProfile {
   address: string;
   phone: string;
   fanpage: string;
+  industry: string;
 }
 
 export const DEFAULT_BRAND_PROFILE: BrandProfile = {
@@ -18,6 +19,7 @@ export const DEFAULT_BRAND_PROFILE: BrandProfile = {
   address: '',
   phone: '',
   fanpage: '',
+  industry: '',
 };
 
 export interface UserProfile {
@@ -194,7 +196,7 @@ export const TYPOGRAPHY_STYLES: TypographyStyle[] = [
   'Mạnh mẽ, nổi bật',
 ];
 
-export type BannerGenerationMode = 'clone' | 'design';
+export type BannerGenerationMode = 'clone' | 'design' | 'creative';
 
 export interface LogoSettings {
   image: string | null;
@@ -241,4 +243,35 @@ export interface BannerGenerationState {
   isGenerating: boolean;
   error: string | null;
   results: BannerGeneratedImage[];
+}
+
+// ── Banner Purpose ────────────────────────────────────────────────────────────
+
+export type BannerPurpose = 'promo' | 'new-product' | 'event' | 'facebook-post' | 'story';
+
+export interface BannerPurposeOption {
+  id: BannerPurpose;
+  label: string;
+  /** If set, auto-switch aspect ratio when selected */
+  autoAspectRatio?: '1:1' | '3:4' | '4:3' | '16:9' | '9:16';
+}
+
+export const BANNER_PURPOSES: BannerPurposeOption[] = [
+  { id: 'promo', label: 'Quảng cáo khuyến mãi' },
+  { id: 'new-product', label: 'Ra mắt sản phẩm mới' },
+  { id: 'event', label: 'Thông báo sự kiện' },
+  { id: 'facebook-post', label: 'Facebook Post' },
+  { id: 'story', label: 'Story', autoAspectRatio: '9:16' },
+];
+
+// ── Product Catalog ───────────────────────────────────────────────────────────
+
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  price: string;
+  category: string;
+  image: string;       // Firebase Storage URL or base64
+  createdAt: number;
 }

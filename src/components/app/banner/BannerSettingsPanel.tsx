@@ -1,9 +1,11 @@
 import React from 'react';
-import { Sparkles, Loader2, ShoppingCart, User, AlertCircle } from 'lucide-react';
+import { Sparkles, Loader2, ShoppingCart, User, AlertCircle, Wand2 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import {
     BannerGenerationSettings,
     BannerGenerationMode,
+    BannerPurpose,
+    BANNER_PURPOSES,
     TYPOGRAPHY_STYLES,
     TypographyStyle,
 } from '../../../types';
@@ -11,8 +13,10 @@ import LogoSettingsPanel from './LogoSettingsPanel';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BANNER_CREDIT_COST = 2; // base credits per banner at 1K
+const BANNER_CREDIT_COST = 2; // base credits per banner at 1K (clone/design)
+const CREATIVE_CREDIT_COST = 4; // base credits per banner at 1K (creative)
 const QUALITY_MULTIPLIER: Record<string, number> = { '1K': 1, '2K': 2, '4K': 3 };
+const CREATIVE_QUALITY_MULTIPLIER: Record<string, number> = { '1K': 1, '2K': 2, '4K': 4 };
 const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'] as const;
 const QUALITIES = ['1K', '2K', '4K'] as const;
 
@@ -27,6 +31,9 @@ interface BannerSettingsPanelProps {
     credits: number;
     onGenerate: () => void;
     brandProfileLogo?: string | null;
+    // Creative mode props
+    purpose?: BannerPurpose;
+    onPurposeChange?: (p: BannerPurpose) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -40,11 +47,17 @@ export default function BannerSettingsPanel({
     credits,
     onGenerate,
     brandProfileLogo,
+    purpose,
+    onPurposeChange,
 }: BannerSettingsPanelProps) {
     const set = (patch: Partial<BannerGenerationSettings>) => onChange({ ...settings, ...patch });
 
-    const qualityMul = QUALITY_MULTIPLIER[settings.quality] ?? 1;
-    const costPerBanner = BANNER_CREDIT_COST * qualityMul;
+    const isCreative = settings.mode === 'creative';
+    const baseCost = isCreative ? CREATIVE_CREDIT_COST : BANNER_CREDIT_COST;
+    const qualityMul = isCreative
+        ? (CREATIVE_QUALITY_MULTIPLIER[settings.quality] ?? 1)
+        : (QUALITY_MULTIPLIER[settings.quality] ?? 1);
+    const costPerBanner = baseCost * qualityMul;
     const totalCost = costPerBanner * settings.quantity;
     const notEnough = isLoggedIn && credits < totalCost;
 
@@ -55,8 +68,9 @@ export default function BannerSettingsPanel({
                 <label className="text-[10px] font-mono uppercase text-gray-400 mb-1 block">Chế độ tạo</label>
                 <div className="flex gap-1">
                     {[
-                        { mode: 'clone' as BannerGenerationMode, label: 'Ghép sản phẩm' },
+                        { mode: 'clone' as BannerGenerationMode, label: 'Ghép SP' },
                         { mode: 'design' as BannerGenerationMode, label: 'Thiết kế AI' },
+                        { mode: 'creative' as BannerGenerationMode, label: '✨ Tạo Mới' },
                     ].map(({ mode, label }) => (
                         <button
                             key={mode}
@@ -64,7 +78,9 @@ export default function BannerSettingsPanel({
                             className={cn(
                                 'flex-1 text-[10px] py-1.5 px-2 rounded-lg border transition-all font-medium',
                                 settings.mode === mode
-                                    ? 'border-brand-orange bg-brand-orange text-white'
+                                    ? mode === 'creative'
+                                        ? 'border-purple-500 bg-purple-500 text-white'
+                                        : 'border-brand-orange bg-brand-orange text-white'
                                     : 'border-gray-100 bg-white hover:border-gray-300 text-gray-600'
                             )}
                         >
@@ -72,7 +88,41 @@ export default function BannerSettingsPanel({
                         </button>
                     ))}
                 </div>
+                {isCreative && (
+                    <p className="text-[9px] text-purple-500 mt-1 font-medium">
+                        🎨 Tạo banner từ mô tả — không cần ảnh tham chiếu
+                    </p>
+                )}
             </div>
+
+            {/* ── Purpose (Creative mode only) ── */}
+            {isCreative && onPurposeChange && (
+                <div>
+                    <label className="text-[10px] font-mono uppercase text-gray-400 mb-1 block">Mục đích banner</label>
+                    <div className="flex flex-wrap gap-1">
+                        {BANNER_PURPOSES.map((p) => (
+                            <button
+                                key={p.id}
+                                onClick={() => {
+                                    onPurposeChange(p.id);
+                                    // Auto-switch aspect ratio if defined
+                                    if (p.autoAspectRatio) {
+                                        set({ aspectRatio: p.autoAspectRatio });
+                                    }
+                                }}
+                                className={cn(
+                                    'text-[9px] py-1 px-2 rounded-lg border transition-all font-medium',
+                                    purpose === p.id
+                                        ? 'border-purple-500 bg-purple-500 text-white'
+                                        : 'border-gray-100 bg-white hover:border-gray-300 text-gray-600'
+                                )}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* ── Typography ── */}
             <div>
@@ -182,7 +232,7 @@ export default function BannerSettingsPanel({
                     </div>
                     {(qualityMul > 1 || settings.quantity > 1) && (
                         <p className="text-[9px] text-gray-400">
-                            {BANNER_CREDIT_COST}cr × {settings.quality}({qualityMul}×)
+                            {baseCost}cr × {settings.quality}({qualityMul}×)
                             {settings.quantity > 1 && ` × ${settings.quantity} biến thể`}
                             {' = '}{totalCost} cr
                         </p>
@@ -222,9 +272,9 @@ export default function BannerSettingsPanel({
                     </>
                 ) : (
                     <>
-                        <Sparkles size={15} />
+                        {isCreative ? <Wand2 size={15} /> : <Sparkles size={15} />}
                         <span className="text-sm">
-                            {settings.mode === 'clone' ? 'Tạo thiết kế' : 'Thiết kế AI'}
+                            {settings.mode === 'clone' ? 'Tạo thiết kế' : settings.mode === 'creative' ? '✨ Tạo banner mới' : 'Thiết kế AI'}
                         </span>
                     </>
                 )}
