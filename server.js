@@ -44,7 +44,7 @@ app.use(helmet({
   crossOriginOpenerPolicy: false, // Disabled to allow Firebase Auth cross-origin popups
 }));
 
-// 3. CORS – allow only production domain + localhost dev
+// 3. CORS – allow only explicitly listed origins
 const ALLOWED_ORIGINS = [
   'https://anhnet.top',
   'https://www.anhnet.top',
@@ -55,30 +55,24 @@ const ALLOWED_ORIGINS = [
 ];
 app.use(cors({
   origin: (origin, callback) => {
-    // Check if origin is allowed exactly, or if it's a dynamic Firebase domain
-    if (
-      !origin ||
-      ALLOWED_ORIGINS.includes(origin) ||
-      origin.endsWith('.hosted.app') ||
-      origin.endsWith('.web.app') ||
-      origin.endsWith('.firebaseapp.com')
-    ) {
+    // Allow requests with no origin (server-to-server, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
     } else {
-      // Return false instead of throwing new Error() to prevent Express 500 crash
       callback(null, false);
     }
   },
   credentials: true,
 }));
 
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
 // Handle payload too large errors
 app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') {
-    return res.status(413).json({ error: 'Dung lượng dữ liệu tải lên quá lớn (tối đa 100MB). Vui lòng giảm kích thước hoặc số lượng ảnh.' });
+    return res.status(413).json({ error: 'Dung lượng dữ liệu tải lên quá lớn (tối đa 25MB). Vui lòng giảm kích thước hoặc số lượng ảnh.' });
   }
   next(err);
 });
@@ -184,6 +178,15 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
     return res.status(400).json({ error: 'Số lượng ảnh phải từ 1 đến 4.' });
   }
 
+  // Sanitize user-controlled text fields injected into AI prompt
+  const sanitizePromptText = (text, maxLen = 300) => {
+    if (!text || typeof text !== 'string') return '';
+    return text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').trim().slice(0, maxLen);
+  };
+  if (settings?.backgroundPrompt) {
+    settings.backgroundPrompt = sanitizePromptText(settings.backgroundPrompt);
+  }
+
   if (apiKeys.length === 0) {
     return res.status(500).json({ error: 'Chưa cấu hình GEMINI_API_KEYS trên server.' });
   }
@@ -228,7 +231,9 @@ app.post('/api/generate', generateLimiter, verifyToken, async (req, res) => {
 
   // Build side dish prompt section
   const validSideDishes = Array.isArray(sideDishes)
-    ? sideDishes.filter(d => d && typeof d.base64 === 'string')
+    ? sideDishes
+        .filter(d => d && typeof d.base64 === 'string')
+        .map(d => ({ ...d, description: sanitizePromptText(d.description, 150) }))
     : [];
 
   const sideDishPromptSection = validSideDishes.length > 0
@@ -675,11 +680,21 @@ async function callGeminiBanner(parts, aspectRatio, quality) {
 
 // 12a. POST /api/generate/banner — Clone mode
 app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) => {
-  const { referenceImages, productImages, brandDescription, promoInfo, userPrompt, settings } = req.body;
+  const { referenceImages, productImages, settings } = req.body;
+  let { brandDescription, promoInfo, userPrompt } = req.body;
 
   if (!referenceImages?.length || !productImages?.length) {
     return res.status(400).json({ error: 'Thiếu ảnh tham khảo hoặc ảnh sản phẩm.' });
   }
+
+  // Sanitize user-controlled text injected into AI prompt
+  const sanitizePromptText = (text, maxLen = 300) => {
+    if (!text || typeof text !== 'string') return '';
+    return text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').trim().slice(0, maxLen);
+  };
+  brandDescription = sanitizePromptText(brandDescription, 300);
+  promoInfo = sanitizePromptText(promoInfo, 200);
+  userPrompt = sanitizePromptText(userPrompt, 300);
 
   const quantity = Math.min(Math.max(parseInt(String(settings?.quantity)) || 1, 1), 5);
   const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
@@ -954,11 +969,17 @@ app.post('/api/generate/design', generateLimiter, verifyToken, async (req, res) 
 
 // 12c. POST /api/generate/edit — Edit existing banner
 app.post('/api/generate/edit', generateLimiter, verifyToken, async (req, res) => {
-  const { currentImageBase64, editPrompt, aspectRatio } = req.body;
+  const { currentImageBase64, aspectRatio } = req.body;
+  let { editPrompt } = req.body;
 
   if (!currentImageBase64 || !editPrompt) {
     return res.status(400).json({ error: 'Thiếu ảnh hoặc yêu cầu chỉnh sửa.' });
   }
+
+  // Sanitize user-controlled text injected into AI prompt
+  editPrompt = typeof editPrompt === 'string'
+    ? editPrompt.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').trim().slice(0, 500)
+    : '';
 
   const ADMIN_EMAIL = 'ngohuyhoang1995@gmail.com';
   const isAdmin = req.user.email === ADMIN_EMAIL;

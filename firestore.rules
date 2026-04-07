@@ -6,37 +6,57 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == 'ngohuyhoang1995@gmail.com';
     }
 
+    // Fields that only the server (Admin SDK) or admin may touch
+    function touchesProtectedFields() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['credits', 'totalGenerated', 'uid', 'createdAt']);
+    }
+
     // Rules for User profiles
     match /users/{userId} {
-      allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      // Anyone can read their own profile
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+
+      // Admin can write anything (used by Admin dashboard)
+      allow write: if isAdmin();
+
+      // Users can update non-sensitive fields only (e.g. displayName, onboardingCompleted)
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && !touchesProtectedFields();
+
+      // Users can create their own profile document (first login) but cannot set credits/totalGenerated
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && !request.resource.data.keys().hasAny(['credits', 'totalGenerated']);
     }
 
-    // Rules for Orders — users can read/write their own orders
+    // Rules for Orders
     match /orders/{orderId} {
+      // Users can read their own orders; admin can read all
       allow read: if isAdmin() || (
-        request.auth != null && (
-          resource == null || resource.data.userId == request.auth.uid
-        )
+        request.auth != null && resource.data.userId == request.auth.uid
       );
-      allow write: if isAdmin() || (
-        request.auth != null && (
-          (resource != null && resource.data.userId == request.auth.uid) ||
-          (resource == null && request.resource.data.userId == request.auth.uid)
-        )
-      );
+
+      // Users can only CREATE a new pending order for themselves
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      // Only admin (or server via Admin SDK) can update/delete orders
+      allow update, delete: if isAdmin();
     }
 
-    // Rules for Generations and other collections (documents having userId field)
-    match /{collection}/{docId} {
-      allow read, write: if isAdmin() || (
-        request.auth != null && (
-          (resource != null && resource.data.userId == request.auth.uid) ||
-          (resource == null && request.resource.data.userId == request.auth.uid)
-        )
+    // Rules for Generations — users can read their own; server writes via Admin SDK
+    match /generations/{docId} {
+      allow read: if isAdmin() || (
+        request.auth != null && resource.data.userId == request.auth.uid
       );
+      // Writes come from server-side Admin SDK only (no client write needed)
+      allow write: if isAdmin();
     }
 
-    // Default deny for anything else
+    // Default deny for everything else (webhook_logs, sepay_transactions, etc.)
     match /{document=**} {
       allow read, write: if isAdmin();
     }
