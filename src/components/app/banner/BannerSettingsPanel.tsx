@@ -1,9 +1,8 @@
 import React from 'react';
-import { Sparkles, Loader2, ShoppingCart, User, AlertCircle, Wand2 } from 'lucide-react';
+import { Loader2, ShoppingCart, User, AlertCircle, Wand2 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import {
     BannerGenerationSettings,
-    BannerGenerationMode,
     BannerPurpose,
     BANNER_PURPOSES,
     TYPOGRAPHY_STYLES,
@@ -63,40 +62,8 @@ export default function BannerSettingsPanel({
 
     return (
         <section className="glass-card p-4 rounded-2xl space-y-2.5">
-            {/* ── Mode Switcher ── */}
-            <div>
-                <label className="text-[10px] font-mono uppercase text-gray-400 mb-1 block">Chế độ tạo</label>
-                <div className="flex gap-1">
-                    {[
-                        { mode: 'clone' as BannerGenerationMode, label: 'Ghép SP' },
-                        { mode: 'design' as BannerGenerationMode, label: 'Thiết kế AI' },
-                        { mode: 'creative' as BannerGenerationMode, label: '✨ Tạo Mới' },
-                    ].map(({ mode, label }) => (
-                        <button
-                            key={mode}
-                            onClick={() => set({ mode })}
-                            className={cn(
-                                'flex-1 text-[10px] py-1.5 px-2 rounded-lg border transition-all font-medium',
-                                settings.mode === mode
-                                    ? mode === 'creative'
-                                        ? 'border-purple-500 bg-purple-500 text-white'
-                                        : 'border-brand-orange bg-brand-orange text-white'
-                                    : 'border-gray-100 bg-white hover:border-gray-300 text-gray-600'
-                            )}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
-                {isCreative && (
-                    <p className="text-[9px] text-purple-500 mt-1 font-medium">
-                        🎨 Tạo banner từ mô tả — không cần ảnh tham chiếu
-                    </p>
-                )}
-            </div>
-
-            {/* ── Purpose (Creative mode only) ── */}
-            {isCreative && onPurposeChange && (
+            {/* ── Purpose ── */}
+            {onPurposeChange && (
                 <div>
                     <label className="text-[10px] font-mono uppercase text-gray-400 mb-1 block">Mục đích banner</label>
                     <div className="flex flex-wrap gap-1">
@@ -272,10 +239,8 @@ export default function BannerSettingsPanel({
                     </>
                 ) : (
                     <>
-                        {isCreative ? <Wand2 size={15} /> : <Sparkles size={15} />}
-                        <span className="text-sm">
-                            {settings.mode === 'clone' ? 'Tạo thiết kế' : settings.mode === 'creative' ? '✨ Tạo banner mới' : 'Thiết kế AI'}
-                        </span>
+                        <Wand2 size={15} />
+                        <span className="text-sm">✨ Tạo banner mới</span>
                     </>
                 )}
             </button>

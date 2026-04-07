@@ -8,7 +8,7 @@ import { fileToBase64 } from '../lib/utils';
 import {
     GenerationSettings, GeneratedImage, IMAGE_MODELS, IMAGE_SIZE_MULTIPLIER,
     BannerGenerationSettings, BannerGeneratedImage, BannerGenerationState,
-    DEFAULT_BANNER_SETTINGS,
+    DEFAULT_BANNER_SETTINGS, BannerPurpose,
 } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -31,7 +31,8 @@ import BannerGallery from '../components/app/banner/BannerGallery';
 import GenerationHistory from '../components/app/GenerationHistory';
 
 // ── Services ──────────────────────────────────────────────────────────────────
-import { generateBanner, generateDesign, editBanner } from '../lib/bannerService';
+import { generateCreativeBanner, editBanner } from '../lib/bannerService';
+import ProductPickerModal from '../components/app/banner/ProductPickerModal';
 import { applyLogoToImage, cropToAspectRatio } from '../lib/imageUtils';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,10 +114,13 @@ export default function AppPage() {
     const [bannerSettings, setBannerSettings] = useState<BannerGenerationSettings>(DEFAULT_BANNER_SETTINGS);
     const [referenceImages, setReferenceImages] = useState<string[]>([]);
     const [productImages, setProductImages] = useState<string[]>([]);
-    const [infoFiles, setInfoFiles] = useState<string[]>([]);
     const [brandDescription, setBrandDescription] = useState('');
     const [promoInfo, setPromoInfo] = useState('');
     const [bannerPrompt, setBannerPrompt] = useState('');
+    const [bannerTitle, setBannerTitle] = useState('');
+    const [industry, setIndustry] = useState('');
+    const [bannerPurpose, setBannerPurpose] = useState<BannerPurpose>('promo');
+    const [showProductPicker, setShowProductPicker] = useState(false);
     const [bannerState, setBannerState] = useState<BannerGenerationState>({
         isGenerating: false,
         error: null,
@@ -158,6 +162,10 @@ export default function AppPage() {
                 if (brandProfile.slogan) parts.push(brandProfile.slogan);
                 if (brandProfile.shopName) parts.unshift(brandProfile.shopName);
                 setBrandDescription(parts.join(' — '));
+            }
+            // Auto-fill industry from brand profile
+            if (!industry && brandProfile.industry) {
+                setIndustry(brandProfile.industry);
             }
             // Auto-fill logo only if user hasn't manually removed it this session
             if (!bannerSettings.logo.image && brandProfile.logo && !logoManuallyRemoved) {
@@ -381,41 +389,33 @@ export default function AppPage() {
 
     const generateBannerImages = async () => {
         if (!user) { showToast('Vui lòng đăng nhập để tạo banner.', 'warning'); return; }
-        if (referenceImages.length === 0) {
-            showToast('Vui lòng tải lên ít nhất một mẫu thiết kế tham khảo.', 'warning'); return;
-        }
-        if (bannerSettings.mode === 'clone' && productImages.length === 0) {
-            showToast('Chế độ Ghép sản phẩm yêu cầu tải lên ảnh sản phẩm.', 'warning'); return;
-        }
-        if (bannerSettings.mode === 'design' && infoFiles.length === 0) {
-            showToast('Chế độ Thiết kế AI yêu cầu tải lên file thông tin.', 'warning'); return;
+        if (!bannerTitle.trim()) {
+            showToast('Vui lòng nhập tiêu đề banner.', 'warning'); return;
         }
 
         setBannerState({ isGenerating: true, error: null, results: [] });
 
         try {
             const token = await getIdToken();
-            let images: { base64: string; style: string; url?: string }[];
 
-            if (bannerSettings.mode === 'clone') {
-                images = await generateBanner(
-                    token, referenceImages, productImages,
-                    brandDescription, promoInfo, bannerPrompt, bannerSettings
-                );
-            } else {
-                images = await generateDesign(
-                    token, referenceImages, infoFiles,
-                    brandDescription, promoInfo, bannerPrompt, bannerSettings
-                );
-            }
+            const images = await generateCreativeBanner(
+                token,
+                bannerTitle,
+                industry,
+                bannerPurpose,
+                brandDescription,
+                promoInfo,
+                bannerPrompt,
+                productImages,
+                brandProfile?.brandColors ?? [],
+                bannerSettings.logo.image ?? null,
+                bannerSettings,
+            );
 
             const bannerResults: BannerGeneratedImage[] = await Promise.all(
                 images.map(async (img) => {
-                    // Step 1: Crop to correct aspect ratio (Gemini doesn't support aspectRatio param)
                     let rawUrl = img.base64;
                     rawUrl = await cropToAspectRatio(rawUrl, bannerSettings.aspectRatio);
-
-                    // Step 2: Apply logo overlay (clamped inside bounds)
                     let url = rawUrl;
                     if (bannerSettings.logo.image) {
                         url = await applyLogoToImage(rawUrl, bannerSettings.logo);
@@ -432,11 +432,10 @@ export default function AppPage() {
 
             setBannerState({ isGenerating: false, error: null, results: bannerResults });
 
-            // Also add to unified session images (using the Storage URL if available)
             if (bannerResults.length > 0) {
                 const historyImages: GeneratedImage[] = images.map((img, idx) => ({
                     id: bannerResults[idx].id,
-                    url: (img as any).url || bannerResults[idx].url, // prefer Storage URL
+                    url: (img as any).url || bannerResults[idx].url,
                     timestamp: Date.now(),
                     settings: {
                         aspectRatio: bannerSettings.aspectRatio,
@@ -504,11 +503,8 @@ export default function AppPage() {
         }
     };
 
-    // ── banner canGenerate ──
-    const bannerCanGenerate = !!user && referenceImages.length > 0 && (
-        (bannerSettings.mode === 'clone' && productImages.length > 0) ||
-        (bannerSettings.mode === 'design' && infoFiles.length > 0)
-    );
+    // ── banner canGenerate — requires bannerTitle (reference images optional) ──
+    const bannerCanGenerate = !!user && bannerTitle.trim().length > 0;
 
     // ── loading guard ──
     if (authLoading) {
@@ -646,19 +642,21 @@ export default function AppPage() {
                                     )}
 
                                     <BannerUploadPanel
-                                        mode={bannerSettings.mode}
                                         referenceImages={referenceImages}
                                         onReferenceImagesChange={setReferenceImages}
                                         productImages={productImages}
                                         onProductImagesChange={setProductImages}
-                                        infoFiles={infoFiles}
-                                        onInfoFilesChange={setInfoFiles}
                                         brandDescription={brandDescription}
                                         onBrandDescriptionChange={setBrandDescription}
                                         promoInfo={promoInfo}
                                         onPromoInfoChange={setPromoInfo}
                                         prompt={bannerPrompt}
                                         onPromptChange={setBannerPrompt}
+                                        bannerTitle={bannerTitle}
+                                        onBannerTitleChange={setBannerTitle}
+                                        industry={industry}
+                                        onIndustryChange={setIndustry}
+                                        onOpenProductPicker={user ? () => setShowProductPicker(true) : undefined}
                                     />
 
                                     <BannerSettingsPanel
@@ -670,7 +668,10 @@ export default function AppPage() {
                                         credits={credits}
                                         onGenerate={generateBannerImages}
                                         brandProfileLogo={brandProfile?.logo ?? null}
+                                        purpose={bannerPurpose}
+                                        onPurposeChange={setBannerPurpose}
                                     />
+
                                 </>
                             )}
                         </div>
@@ -743,6 +744,16 @@ export default function AppPage() {
                 )}
             </AnimatePresence>
 
+            {/* ── Product Picker Modal ── */}
+            {showProductPicker && user && (
+                <ProductPickerModalWithToken
+                    onClose={() => setShowProductPicker(false)}
+                    onSelect={(imgs) => setProductImages(prev => [...prev, ...imgs])}
+                    currentImages={productImages}
+                    getToken={getIdToken}
+                />
+            )}
+
             {/* ── Onboarding ── */}
             <OnboardingModal
                 open={showOnboarding}
@@ -750,5 +761,33 @@ export default function AppPage() {
                 onClose={handleOnboardingClose}
             />
         </>
+    );
+}
+
+// ── Wrapper to lazy-load token for ProductPickerModal ─────────────────────────
+
+function ProductPickerModalWithToken({
+    onClose,
+    onSelect,
+    currentImages,
+    getToken,
+}: {
+    onClose: () => void;
+    onSelect: (imgs: string[]) => void;
+    currentImages: string[];
+    getToken: () => Promise<string>;
+}) {
+    const [token, setToken] = React.useState('');
+    React.useEffect(() => {
+        getToken().then(setToken).catch(() => { });
+    }, []);
+    if (!token) return null;
+    return (
+        <ProductPickerModal
+            token={token}
+            onClose={onClose}
+            onSelect={onSelect}
+            currentImages={currentImages}
+        />
     );
 }

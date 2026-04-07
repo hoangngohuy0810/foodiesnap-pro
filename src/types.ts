@@ -220,7 +220,7 @@ export const DEFAULT_BANNER_SETTINGS: BannerGenerationSettings = {
   aspectRatio: '3:4',
   quality: '1K',
   typography: 'Tự động',
-  mode: 'clone',
+  mode: 'creative',
   logo: {
     image: null,
     addWhiteBorder: false,
