@@ -208,7 +208,7 @@ export interface LogoSettings {
 
 export interface BannerGenerationSettings {
   quantity: number;
-  aspectRatio: '1:1' | '3:4' | '4:3' | '16:9' | '9:16';
+  aspectRatio: '1:1' | '2:3' | '3:4' | '4:3' | '4:5' | '9:16' | '16:9';
   quality: '1K' | '2K' | '4K';
   typography: TypographyStyle;
   mode: BannerGenerationMode;

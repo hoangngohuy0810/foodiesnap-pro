@@ -16,7 +16,8 @@ const BANNER_CREDIT_COST = 2; // base credits per banner at 1K (clone/design)
 const CREATIVE_CREDIT_COST = 4; // base credits per banner at 1K (creative)
 const QUALITY_MULTIPLIER: Record<string, number> = { '1K': 1, '2K': 2, '4K': 3 };
 const CREATIVE_QUALITY_MULTIPLIER: Record<string, number> = { '1K': 1, '2K': 2, '4K': 4 };
-const ASPECT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'] as const;
+// Tỷ lệ hỗ trợ bởi Gemini 3 Pro/3.1 Flash. Tham chiếu: GEMINI_IMAGE_MODELS.md
+const ASPECT_RATIOS = ['1:1', '2:3', '3:4', '4:3', '4:5', '9:16', '16:9'] as const;
 const QUALITIES = ['1K', '2K', '4K'] as const;
 
 // ── Props ─────────────────────────────────────────────────────────────────────

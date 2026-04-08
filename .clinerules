@@ -18,7 +18,10 @@ Mỗi khi thêm tính năng mới có liên quan đến Gemini AI (tạo ảnh, 
 config: {
   responseModalities: ['IMAGE', 'TEXT'],  // BẮT BUỘC có cả TEXT
   temperature: 1.0,
-  // TUYỆT ĐỐI KHÔNG dùng imageConfig — chỉ dành cho Imagen API
+  imageConfig: {                          // ✅ HỖ TRỢ cho tất cả Gemini image models
+    aspectRatio: '3:4',                   // Tỷ lệ khung hình output
+    imageSize: '1K',                      // Chỉ Gemini 3.x (không dùng cho 2.5 Flash)
+  },
 }
 ```
 

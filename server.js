@@ -344,12 +344,21 @@ ${sideDishPromptSection}
 
         try {
           const ai = new GoogleGenAI({ apiKey });
+          // Tham chiếu: GEMINI_IMAGE_MODELS.md — imageConfig hỗ trợ aspectRatio cho tất cả Gemini image models
+          const isGemini3x = modelConfig.apiModel.includes('gemini-3');
+          // Map '512px' (frontend type) → '512' (API format). imageSize chỉ dùng cho Gemini 3.x
+          const rawImageSize = settings?.imageSize;
+          const apiImageSize = rawImageSize === '512px' ? '512' : rawImageSize;
           const response = await ai.models.generateContent({
             model: modelConfig.apiModel,
             contents: [{ role: 'user', parts }],
             config: {
               responseModalities: ['IMAGE', 'TEXT'],
               temperature: 1.0,
+              imageConfig: {
+                aspectRatio: settings?.aspectRatio || '1:1',
+                ...(isGemini3x && apiImageSize ? { imageSize: apiImageSize } : {}),
+              },
             },
           });
 
@@ -644,6 +653,7 @@ const getMimeTypeBanner = (b64) => {
 };
 
 // Helper: call Gemini with retry/key rotation for banner
+// Tham chiếu: GEMINI_IMAGE_MODELS.md — imageConfig hỗ trợ aspectRatio + imageSize cho Gemini 3.x
 async function callGeminiBanner(parts, aspectRatio, quality) {
   const maxRetries = Math.min(apiKeys.length * 2, 5);
   let lastError = null;
@@ -654,12 +664,21 @@ async function callGeminiBanner(parts, aspectRatio, quality) {
 
     try {
       const ai = new GoogleGenAI({ apiKey });
+      // Bật Thinking "High" cho banner chất lượng 2K+ để suy luận tốt hơn với prompt phức tạp.
+      // Tham chiếu: GEMINI_IMAGE_MODELS.md §5 — Thinking mode chỉ cho Gemini 3.1 Flash Image.
+      // Gemini 3 Pro Image (BANNER_MODEL) suy luận tự động, không cần cấu hình thêm.
+      const useHighThinking = quality === '2K' || quality === '4K';
       const response = await ai.models.generateContent({
         model: BANNER_MODEL,
         contents: [{ role: 'user', parts }],
         config: {
           responseModalities: ['IMAGE', 'TEXT'],
           temperature: 1.0,
+          imageConfig: {
+            aspectRatio: aspectRatio || '3:4',
+            ...(quality && quality !== '512' ? { imageSize: quality } : {}),
+          },
+          ...(useHighThinking ? { thinkingConfig: { thinkingLevel: 'High' } } : {}),
         },
       });
 
@@ -763,6 +782,8 @@ app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) 
     ROLE: expert AI Graphic Designer and Copywriter.
     TASK: Create a high-converting, visually stunning advertising banner.
 
+    CANVAS SPECIFICATION — MANDATORY: Output image MUST have EXACTLY ${settings?.aspectRatio || '3:4'} aspect ratio (width:height). Design every element to fit this canvas precisely.
+
     INPUTS:
     1. Reference Images (First ${referenceImages.length} images): These define the visual style, layout composition, color grading, and general vibe.
     2. Product Assets (Subsequent images): These are the hero objects to feature.
@@ -778,7 +799,7 @@ app.post('/api/generate/banner', generateLimiter, verifyToken, async (req, res) 
     3. COMPOSITION: Prioritize visual aesthetics. Negative space is key. Design Style: "${style}".
        ${userPrompt ? `- User's Custom Wishlist: ${userPrompt}` : ''}
 
-    OUTPUT: A single, high-quality image containing the product and rendered text.
+    OUTPUT: A single, high-quality image at the exact ${settings?.aspectRatio || '3:4'} aspect ratio.
       `;
 
       const parts = [{ text: promptText }];
@@ -906,6 +927,8 @@ app.post('/api/generate/design', generateLimiter, verifyToken, async (req, res) 
     ROLE: Expert AI Graphic Designer.
     TASK: Design a professional advertising banner by extracting content from an Information File and applying a specific Visual Style.
 
+    CANVAS SPECIFICATION — MANDATORY: Output image MUST have EXACTLY ${settings?.aspectRatio || '3:4'} aspect ratio (width:height). Design every element to fit this canvas precisely.
+
     INPUTS:
     1. Reference Images (First ${referenceImages.length} items): DEFINES THE VISUAL STYLE (Color palette, layout mood, font style, vibe).
     2. Information Source (Subsequent items): Contains the RAW CONTENT (Program details, dates, prices, logos, or main subject).
@@ -918,7 +941,7 @@ app.post('/api/generate/design', generateLimiter, verifyToken, async (req, res) 
        - Ensure text is legible. Create a balanced composition.
        ${userPrompt ? `- User's Custom Wishlist: ${userPrompt}` : ''}
 
-    OUTPUT: A single, high-quality banner image that presents the extracted information in the requested style.
+    OUTPUT: A single, high-quality banner image at the exact ${settings?.aspectRatio || '3:4'} aspect ratio.
       `;
 
       const parts = [{ text: promptText }];
@@ -1221,6 +1244,7 @@ app.post('/api/generate/creative', generateLimiter, verifyToken, async (req, res
 
     CRITICAL RULES:
     - Output ONE single, complete, high-quality banner image
+    - ASPECT RATIO: The output image MUST have an exact ${settings?.aspectRatio || '3:4'} aspect ratio (width:height). This is NON-NEGOTIABLE. Design the entire canvas to fit this ratio perfectly.
     - The banner must look like it was designed by a top-tier agency
     - Ensure 60/30/10 color rule for visual harmony
     - NO placeholder text — every word must be intentional and meaningful

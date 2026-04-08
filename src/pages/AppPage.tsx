@@ -33,7 +33,7 @@ import GenerationHistory from '../components/app/GenerationHistory';
 // ── Services ──────────────────────────────────────────────────────────────────
 import { generateCreativeBanner, editBanner } from '../lib/bannerService';
 import ProductPickerModal from '../components/app/banner/ProductPickerModal';
-import { applyLogoToImage, cropToAspectRatio } from '../lib/imageUtils';
+import { applyLogoToImage } from '../lib/imageUtils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -277,13 +277,10 @@ export default function AppPage() {
 
         setIsFoodGenerating(true);
         try {
-            let foodBase64 = await fileToBase64(foodImage);
-            foodBase64 = await cropToAspectRatio(foodBase64, activeSettings.aspectRatio);
-
-            let bgBase64 = bgImage ? await fileToBase64(bgImage) : null;
-            if (bgBase64) {
-                bgBase64 = await cropToAspectRatio(bgBase64, activeSettings.aspectRatio);
-            }
+            // Không cần crop input — API đã hỗ trợ imageConfig.aspectRatio để kiểm soát tỷ lệ output.
+            // Giữ nguyên ảnh gốc để AI có thêm context (crop input có thể làm mất nội dung quan trọng).
+            const foodBase64 = await fileToBase64(foodImage);
+            const bgBase64 = bgImage ? await fileToBase64(bgImage) : null;
             const token = await getIdToken();
 
             const sideDishesData = await Promise.all(
@@ -414,8 +411,9 @@ export default function AppPage() {
 
             const bannerResults: BannerGeneratedImage[] = await Promise.all(
                 images.map(async (img) => {
-                    let rawUrl = img.base64;
-                    rawUrl = await cropToAspectRatio(rawUrl, bannerSettings.aspectRatio);
+                    // Do NOT crop banner output — the AI generates at the requested ratio already.
+                    // Cropping the output would cut off content from the generated banner.
+                    const rawUrl = img.base64;
                     let url = rawUrl;
                     if (bannerSettings.logo.image) {
                         url = await applyLogoToImage(rawUrl, bannerSettings.logo);
@@ -471,14 +469,12 @@ export default function AppPage() {
 
         try {
             const token = await getIdToken();
-            let newBase64 = await editBanner(token, currentImage.rawUrl, editPromptText, currentImage.aspectRatio);
-
-            // Crop to correct aspect ratio after edit
-            newBase64 = await cropToAspectRatio(newBase64, currentImage.aspectRatio);
-            const rawBase64 = newBase64;
+            // Do NOT crop after edit — same as initial generation, the AI output should be used as-is.
+            const rawBase64 = await editBanner(token, currentImage.rawUrl, editPromptText, currentImage.aspectRatio);
+            let newBase64 = rawBase64;
 
             if (bannerSettings.logo.image) {
-                newBase64 = await applyLogoToImage(newBase64, bannerSettings.logo);
+                newBase64 = await applyLogoToImage(rawBase64, bannerSettings.logo);
             }
 
             setBannerState(prev => {
