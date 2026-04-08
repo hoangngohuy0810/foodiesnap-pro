@@ -161,7 +161,8 @@ export async function generateCreativeBanner(
     productImages: string[],
     brandColors: string[],
     logo: string | null,
-    settings: BannerGenerationSettings
+    settings: BannerGenerationSettings,
+    referenceImages: string[] = []
 ): Promise<{ base64: string; style: string }[]> {
     const res = await fetchWithTimeout(
         '/api/generate/creative',
@@ -181,6 +182,7 @@ export async function generateCreativeBanner(
                 productImages,
                 brandColors,
                 logo,
+                referenceImages,
                 settings: {
                     aspectRatio: settings.aspectRatio,
                     quality: settings.quality,

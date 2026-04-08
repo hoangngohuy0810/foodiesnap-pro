@@ -407,6 +407,7 @@ export default function AppPage() {
                 brandProfile?.brandColors ?? [],
                 bannerSettings.logo.image ?? null,
                 bannerSettings,
+                referenceImages,
             );
 
             const bannerResults: BannerGeneratedImage[] = await Promise.all(

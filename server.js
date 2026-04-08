@@ -1141,7 +1141,7 @@ const CREATIVE_STYLES = [
 
 app.post('/api/generate/creative', generateLimiter, verifyToken, async (req, res) => {
   let { bannerTitle, industry, purpose, brandDescription, promoInfo, userPrompt } = req.body;
-  const { productImages, brandColors, logo, settings } = req.body;
+  const { productImages, brandColors, logo, settings, referenceImages } = req.body;
 
   // Sanitize user-controlled text
   const sanitizePromptText = (text, maxLen = 300) => {
@@ -1197,63 +1197,109 @@ app.post('/api/generate/creative', generateLimiter, verifyToken, async (req, res
   const typoInstruction = TYPO_PROMPT_MAP[settings?.typography] || TYPO_PROMPT_MAP['Tự động'];
   const purposeInstruction = BANNER_PURPOSE_PROMPT_MAP[purpose] || BANNER_PURPOSE_PROMPT_MAP['promo'];
 
+  // Validate & prepare reference images array
+  const validReferenceImages = Array.isArray(referenceImages) ? referenceImages.filter(r => typeof r === 'string' && r.startsWith('data:')) : [];
+  const hasReferenceImages = validReferenceImages.length > 0;
+
+  // Detect food/restaurant industry for specialized prompting
+  const industryLower = (industry || '').toLowerCase();
+  const isFoodIndustry = /ẩm thực|food|café|cafe|cà phê|nhà hàng|restaurant|quán ăn|bếp|kitchen|bakery|bánh|trà|tea|bia|beer|đồ uống|beverage|fast.?food|pizza|sushi|bbq|grill|nướng|lẩu|hotpot/i.test(industryLower);
+
   try {
     const tasks = Array.from({ length: quantity }, (_, i) => {
-      const style = CREATIVE_STYLES[i % CREATIVE_STYLES.length];
+      const style = hasReferenceImages
+        ? 'Lấy cảm hứng từ ảnh tham chiếu'  // When reference exists, style follows reference
+        : CREATIVE_STYLES[i % CREATIVE_STYLES.length];
 
       // Build color palette instruction
       const colorPalette = Array.isArray(brandColors) && brandColors.length > 0
         ? `COLOR PALETTE: Use these brand colors as the primary palette: ${brandColors.join(', ')}. The first color (${brandColors[0]}) is the primary brand color.`
         : 'COLOR PALETTE: Choose a professional, commercially appealing color palette that suits the industry and purpose.';
 
-      const promptText = `
-    ROLE: World-class AI Graphic Designer & Art Director with 20 years of experience creating award-winning advertising campaigns.
-    TASK: Create a professional, high-converting advertising banner FROM SCRATCH — no reference image provided.
+      // ── REFERENCE STYLE SECTION (NEW — highest priority when reference images exist) ──
+      const referenceStyleSection = hasReferenceImages ? `
+    ═══════════════════════════════════════════════════════════
+    ⚡ REFERENCE IMAGES PROVIDED (${validReferenceImages.length} images) — THIS IS THE HIGHEST PRIORITY
+    ═══════════════════════════════════════════════════════════
+    The first ${validReferenceImages.length} attached image(s) are STYLE REFERENCES. You MUST:
+    1. DEEPLY ANALYZE each reference image: study the layout structure, color grading, typography style, visual effects (glow, shadows, gradients, overlays), background treatment, element placement, and overall "energy/vibe".
+    2. REPLICATE THE SAME VISUAL QUALITY AND STYLE: Your output must match the professional level of these references. If the reference has bold 3D text with glow effects → use bold 3D text with glow effects. If it has a dark premium background with golden accents → use that same approach.
+    3. ADAPT THE LAYOUT STRUCTURE: Follow a similar composition pattern — where headlines are placed, how products are arranged, where CTAs sit, how decorative elements frame the content.
+    4. MATCH THE COLOR GRADING: Use a similar color temperature, saturation level, and contrast ratio as the reference images.
+    5. CREATE A NEW DESIGN — do NOT copy the reference pixel-for-pixel. Use the reference as a "mood board" and create original content with the SAME professional quality and visual DNA.
+    ═══════════════════════════════════════════════════════════` : '';
 
+      // ── USER REQUIREMENTS SECTION (elevated to top priority) ──
+      const userRequirementsSection = userPrompt ? `
+    ⚠️ MANDATORY USER REQUIREMENTS (MUST FOLLOW):
+    "${userPrompt}"
+    → These are the user's explicit instructions. They override default style choices. If the user specifies colors, mood, style, or any visual direction — FOLLOW IT PRECISELY.` : '';
+
+      // ── FOOD INDUSTRY SPECIALIZATION ──
+      const foodIndustrySection = isFoodIndustry ? `
+    🍽️ FOOD & BEVERAGE INDUSTRY SPECIALIZATION:
+    - Make food look IRRESISTIBLE: warm tones, appetizing colors (reds, oranges, warm yellows), steam/sizzle effects where appropriate
+    - Food photography lighting: warm key light, soft fill, rim light to make food pop
+    - Show food at its most appetizing angle — hero shots, close-ups showing texture and freshness
+    - Background should evoke appetite: warm gradients, restaurant ambiance, or vibrant festival energy
+    - Use food styling principles: garnishes, sauce drizzles, fresh ingredients visible
+    - Typography should feel energetic and appetizing — avoid cold, corporate fonts for food` : '';
+
+      const promptText = `
+    ROLE: World-class AI Graphic Designer & Art Director specializing in high-conversion commercial advertising.
+    TASK: Create a STUNNING, PROFESSIONAL advertising banner that looks like it was designed by a premium agency.
+
+    CANVAS: Output MUST be exactly ${settings?.aspectRatio || '3:4'} aspect ratio. Non-negotiable.
+${referenceStyleSection}
+${userRequirementsSection}
+
+    ═══ BANNER CONTENT ═══
+    HEADLINE: "${bannerTitle || 'Create an impactful headline based on the context below'}"
+    ${industry ? `INDUSTRY: ${industry}` : ''}
+    ${brandDescription ? `BRAND: "${brandDescription}"` : ''}
+    ${promoInfo ? `PROMO: "${promoInfo}" — Make this VISUALLY DOMINANT (large numbers, bold badges, eye-catching sale graphics)` : ''}
     ${purposeInstruction}
 
-    BANNER TITLE / HEADLINE: "${bannerTitle || 'Create an impactful headline based on the context below'}"
-    ${industry ? `INDUSTRY / BUSINESS TYPE: ${industry}` : ''}
-    ${brandDescription ? `BRAND DESCRIPTION: "${brandDescription}"` : ''}
-    ${promoInfo ? `PROMOTIONAL INFO: "${promoInfo}"` : ''}
+    ═══ VISUAL DESIGN SYSTEM ═══
+    ${!hasReferenceImages ? `DESIGN STYLE: "${style}"` : ''}
+    ${colorPalette}
+${foodIndustrySection}
 
-    STYLE BLUEPRINT:
-    1. DESIGN STYLE: "${style}" — This defines the overall visual language.
-    2. ${colorPalette}
-    3. VISUAL SYSTEM:
-       - Professional commercial photography lighting and shadows
-       - Premium gradient backgrounds with depth and dimension
-       - Clean negative space for visual breathing room
-       - Modern glass-morphism / frosted effects where appropriate
-       - Subtle texture overlays for richness
-    4. LAYOUT COMPOSITION:
-       - Strong visual hierarchy: Hero element → Headline → Supporting text → CTA
-       - Follow the Rule of Thirds for balanced composition
-       - Ensure the banner reads well at both large and thumbnail sizes
-    5. TYPOGRAPHY & COPYWRITING:
-       - ${typoInstruction}
-       - ALL text must be PERFECTLY LEGIBLE and SPELLED CORRECTLY
-       - Use maximum 3 font sizes for clear hierarchy
-       - Headlines should be punchy, action-oriented
-       - If promo info exists, make discount/offer numbers visually dominant
-       ${userPrompt ? `- User's Custom Wishlist: ${userPrompt}` : ''}
+    COMPOSITION RULES:
+    - Strong visual hierarchy: Hero element (product/visual) → Headline (bold, large) → Promo info (eye-catching badges) → CTA button
+    - Fill the canvas meaningfully — avoid excessive empty space. The design should feel RICH and COMPLETE.
+    - Use decorative elements: light effects, sparkles, ribbons, badges, glow, bokeh — whatever fits the style
+    - Background should have DEPTH: gradients, overlays, texture, or environmental context — NOT flat solid colors
 
-    ${productImages?.length > 0 ? `PRODUCT ASSETS: ${productImages.length} product image(s) are attached. Feature them prominently as the hero elements. Match lighting, shadows, and perspective naturally within the composition.` : 'NO PRODUCT IMAGES PROVIDED: Generate or illustrate appropriate visual elements that represent the industry/brand. Use photorealistic style.'}
+    TYPOGRAPHY:
+    - ${typoInstruction}
+    - ALL text PERFECTLY LEGIBLE and SPELLED CORRECTLY
+    - Vietnamese text for Vietnamese input
+    - Headline: LARGE, BOLD, eye-catching — this is the first thing viewers see
+    - Promo numbers (prices, percentages): Make them the BIGGEST, most visually striking elements
+    - CTA: Clear action button or text ("Đặt ngay", "Mua ngay", "Gọi ngay", etc.)
 
-    ${logo ? 'LOGO: A brand logo is attached. Integrate it tastefully — typically top-left or bottom-center, at a size that is visible but not overpowering.' : ''}
+    ${Array.isArray(productImages) && productImages.length > 0 ? `PRODUCT IMAGES: ${productImages.length} product photo(s) attached. Feature them as HERO elements — large, well-lit, naturally integrated. Apply professional food/product photography treatment: enhance colors, add appetizing glow, match the banner's lighting environment.` : `NO PRODUCT IMAGES: Generate photorealistic visual elements representing the ${industry || 'brand'}. Make them look like professional studio photography.`}
 
-    CRITICAL RULES:
-    - Output ONE single, complete, high-quality banner image
-    - ASPECT RATIO: The output image MUST have an exact ${settings?.aspectRatio || '3:4'} aspect ratio (width:height). This is NON-NEGOTIABLE. Design the entire canvas to fit this ratio perfectly.
-    - The banner must look like it was designed by a top-tier agency
-    - Ensure 60/30/10 color rule for visual harmony
-    - NO placeholder text — every word must be intentional and meaningful
-    - Text must be in the same language as the input (Vietnamese if input is Vietnamese)
+    ${logo ? 'LOGO: Brand logo attached. Place it tastefully (top-left or top-center), visible but not overpowering.' : ''}
+
+    QUALITY STANDARD:
+    - This banner will be used for REAL commercial advertising — it must look 100% professional
+    - Match the quality level of banners from major brands (Grab, ShopeeFood, GrabFood, McDonald\'s, Starbucks campaigns)
+    - Rich, layered design with depth — NOT flat or template-looking
+    - Every element serves a purpose — no filler, no placeholder text
       `;
 
       const parts = [{ text: promptText }];
 
-      // Add product images if provided
+      // Add reference images FIRST (so AI sees them right after the prompt)
+      if (hasReferenceImages) {
+        validReferenceImages.forEach((ref) => {
+          parts.push({ inlineData: { mimeType: getMimeTypeBanner(ref), data: cleanBase64Banner(ref) } });
+        });
+      }
+
+      // Add product images
       if (Array.isArray(productImages) && productImages.length > 0) {
         productImages.forEach((prod) => {
           parts.push({ inlineData: { mimeType: getMimeTypeBanner(prod), data: cleanBase64Banner(prod) } });
