@@ -114,6 +114,7 @@ export default function AppPage() {
     const [bannerSettings, setBannerSettings] = useState<BannerGenerationSettings>(DEFAULT_BANNER_SETTINGS);
     const [referenceImages, setReferenceImages] = useState<string[]>([]);
     const [productImages, setProductImages] = useState<string[]>([]);
+    const [venueImages, setVenueImages] = useState<string[]>([]);
     const [brandDescription, setBrandDescription] = useState('');
     const [promoInfo, setPromoInfo] = useState('');
     const [bannerPrompt, setBannerPrompt] = useState('');
@@ -408,6 +409,7 @@ export default function AppPage() {
                 bannerSettings.logo.image ?? null,
                 bannerSettings,
                 referenceImages,
+                venueImages,
             );
 
             const bannerResults: BannerGeneratedImage[] = await Promise.all(
@@ -643,6 +645,8 @@ export default function AppPage() {
                                         onReferenceImagesChange={setReferenceImages}
                                         productImages={productImages}
                                         onProductImagesChange={setProductImages}
+                                        venueImages={venueImages}
+                                        onVenueImagesChange={setVenueImages}
                                         brandDescription={brandDescription}
                                         onBrandDescriptionChange={setBrandDescription}
                                         promoInfo={promoInfo}
