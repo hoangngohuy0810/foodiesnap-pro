@@ -1141,7 +1141,7 @@ const CREATIVE_STYLES = [
 
 app.post('/api/generate/creative', generateLimiter, verifyToken, async (req, res) => {
   let { bannerTitle, industry, purpose, brandDescription, promoInfo, userPrompt } = req.body;
-  const { productImages, brandColors, logo, settings, referenceImages } = req.body;
+  const { productImages, brandColors, logo, settings, referenceImages, venueImages } = req.body;
 
   // Sanitize user-controlled text
   const sanitizePromptText = (text, maxLen = 300) => {
@@ -1235,6 +1235,18 @@ app.post('/api/generate/creative', generateLimiter, verifyToken, async (req, res
     "${userPrompt}"
     → These are the user's explicit instructions. They override default style choices. If the user specifies colors, mood, style, or any visual direction — FOLLOW IT PRECISELY.` : '';
 
+      // ── VENUE / SPACE SECTION ──
+      const validVenueImages = Array.isArray(venueImages) ? venueImages.filter(v => typeof v === 'string' && v.startsWith('data:')) : [];
+      const hasVenueImages = validVenueImages.length > 0;
+      const venueSection = hasVenueImages ? `
+    🏠 VENUE / SPACE INTEGRATION (${validVenueImages.length} venue photo(s) attached — HIGH PRIORITY):
+    The attached venue/space image(s) show the ACTUAL interior, ambiance, and decor of this establishment.
+    You MUST use these images to:
+    1. EXTRACT the venue's visual identity: color palette, lighting mood (warm/cool), interior style (modern, rustic, minimalist, cozy...), materials (wood, concrete, brick...), decorative elements.
+    2. CREATE STRONG COHERENCE: The banner background environment should feel like it BELONGS in this space. If the venue has warm Edison bulb lighting → the banner should have warm, golden tones. If the venue has industrial brick walls → incorporate that texture/feel.
+    3. SEAMLESSLY CONNECT food/product to space: The product should look like it was photographed IN that venue — matching ambient lighting, surface textures, and overall mood.
+    4. The venue style should INFORM (not dominate) — it's a backdrop that makes the food/product feel more authentic and contextual.` : '';
+
       // ── FOOD INDUSTRY SPECIALIZATION ──
       const foodIndustrySection = isFoodIndustry ? `
     🍽️ FOOD & BEVERAGE INDUSTRY SPECIALIZATION:
@@ -1264,6 +1276,8 @@ ${userRequirementsSection}
     ${!hasReferenceImages ? `DESIGN STYLE: "${style}"` : ''}
     ${colorPalette}
 ${foodIndustrySection}
+
+${venueSection}
 
     COMPOSITION RULES:
     - Strong visual hierarchy: Hero element (product/visual) → Headline (bold, large) → Promo info (eye-catching badges) → CTA button
@@ -1309,6 +1323,13 @@ ${foodIndustrySection}
       // Add logo if provided
       if (logo && typeof logo === 'string' && logo.startsWith('data:')) {
         parts.push({ inlineData: { mimeType: getMimeTypeBanner(logo), data: cleanBase64Banner(logo) } });
+      }
+
+      // Add venue images (after logo, so AI can use them as context)
+      if (hasVenueImages) {
+        validVenueImages.forEach((venue) => {
+          parts.push({ inlineData: { mimeType: getMimeTypeBanner(venue), data: cleanBase64Banner(venue) } });
+        });
       }
 
       return callGeminiBanner(parts, settings?.aspectRatio, settings?.quality)

@@ -219,6 +219,8 @@ interface BannerUploadPanelProps {
     onReferenceImagesChange: (images: string[]) => void;
     productImages: string[];
     onProductImagesChange: (images: string[]) => void;
+    venueImages: string[];
+    onVenueImagesChange: (images: string[]) => void;
     brandDescription: string;
     onBrandDescriptionChange: (v: string) => void;
     promoInfo: string;
@@ -237,6 +239,8 @@ export default function BannerUploadPanel({
     onReferenceImagesChange,
     productImages,
     onProductImagesChange,
+    venueImages,
+    onVenueImagesChange,
     brandDescription,
     onBrandDescriptionChange,
     promoInfo,
@@ -292,11 +296,32 @@ export default function BannerUploadPanel({
                             </button>
                         )}
                     </div>
+                    <p className="text-[9px] text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1 mb-1.5 flex items-center gap-1">
+                        <span>💡</span>
+                        <span>Chọn <strong>1–3 sản phẩm</strong> để cho kết quả tốt nhất</span>
+                    </p>
                     <MultiImageUpload
                         label=""
                         description="Tải ảnh sản phẩm lên (hoặc để trống — AI sẽ tự vẽ)"
                         images={productImages}
                         onImagesChange={onProductImagesChange}
+                    />
+                </div>
+
+                {/* Venue / Space Images (optional) */}
+                <div>
+                    <label className="text-[10px] font-mono uppercase text-gray-400 mb-1 block">
+                        Ảnh không gian quán <span className="normal-case font-normal text-gray-400">(Tùy chọn)</span>
+                    </label>
+                    <p className="text-[9px] text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1 mb-1.5 flex items-center gap-1">
+                        <span>🏠</span>
+                        <span>Thêm ảnh không gian quán để banner có sự liên kết chặt chẽ từ món ăn đến không gian</span>
+                    </p>
+                    <MultiImageUpload
+                        label=""
+                        description="Tải ảnh không gian, nội thất quán để AI tạo banner phù hợp"
+                        images={venueImages}
+                        onImagesChange={onVenueImagesChange}
                     />
                 </div>
 
