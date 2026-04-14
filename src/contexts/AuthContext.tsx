@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import {
   User,
   onAuthStateChanged,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signInWithEmailAndPassword,
@@ -69,55 +70,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Ref để theo dõi xem redirect result đã xử lý xong chưa
+  const redirectCheckedRef = useRef(false);
+
   // Xử lý kết quả redirect khi trang load lại sau khi đăng nhập Google
+  // PHẢI chờ getRedirectResult trước khi cho phép onAuthStateChanged set loading = false
   useEffect(() => {
-    getRedirectResult(auth).catch((error) => {
-      console.error('Google redirect sign-in error:', error);
-    });
-  }, []);
+    let isMounted = true;
 
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      // Clean up previous profile listener
-      if (unsubscribeProfileRef.current) {
-        unsubscribeProfileRef.current();
-        unsubscribeProfileRef.current = null;
+    const handleRedirectAndAuth = async () => {
+      // 1. Xử lý redirect result trước (nếu có)
+      try {
+        await getRedirectResult(auth);
+      } catch (error) {
+        console.error('Google redirect sign-in error:', error);
       }
 
-      setUser(firebaseUser);
-
-      if (!firebaseUser) {
-        setUserProfile(null);
-        setLoading(false);
-        return;
+      // Đánh dấu đã kiểm tra redirect xong
+      if (isMounted) {
+        redirectCheckedRef.current = true;
       }
 
-      // Ensure profile exists (fire and forget, don't await here)
-      ensureUserProfile(firebaseUser).catch(console.error);
+      // 2. Sau khi redirect đã xử lý, lắng nghe auth state
+      const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+        if (!isMounted) return;
 
-      // Set up realtime listener for user profile
-      const userRef = doc(db, 'users', firebaseUser.uid);
-      const unsubscribeProfile = onSnapshot(
-        userRef,
-        (snap) => {
-          if (snap.exists()) {
-            setUserProfile(snap.data() as UserProfile);
-          } else {
-            setUserProfile(null);
-          }
-          setLoading(false);
-        },
-        (error) => {
-          console.error('Firestore onSnapshot error:', error);
-          setLoading(false);
+        // Clean up previous profile listener
+        if (unsubscribeProfileRef.current) {
+          unsubscribeProfileRef.current();
+          unsubscribeProfileRef.current = null;
         }
-      );
 
-      unsubscribeProfileRef.current = unsubscribeProfile;
+        setUser(firebaseUser);
+
+        if (!firebaseUser) {
+          setUserProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        // Ensure profile exists (fire and forget, don't await here)
+        ensureUserProfile(firebaseUser).catch(console.error);
+
+        // Set up realtime listener for user profile
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const unsubscribeProfile = onSnapshot(
+          userRef,
+          (snap) => {
+            if (!isMounted) return;
+            if (snap.exists()) {
+              setUserProfile(snap.data() as UserProfile);
+            } else {
+              setUserProfile(null);
+            }
+            setLoading(false);
+          },
+          (error) => {
+            console.error('Firestore onSnapshot error:', error);
+            if (isMounted) setLoading(false);
+          }
+        );
+
+        unsubscribeProfileRef.current = unsubscribeProfile;
+      });
+
+      // Lưu unsubscribe để cleanup
+      return unsubscribeAuth;
+    };
+
+    let unsubscribeAuth: (() => void) | undefined;
+    handleRedirectAndAuth().then((unsub) => {
+      unsubscribeAuth = unsub;
     });
 
     return () => {
-      unsubscribeAuth();
+      isMounted = false;
+      if (unsubscribeAuth) unsubscribeAuth();
       if (unsubscribeProfileRef.current) {
         unsubscribeProfileRef.current();
         unsubscribeProfileRef.current = null;
@@ -126,7 +154,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
-    await signInWithRedirect(auth, googleProvider);
+    // Ưu tiên popup (không navigate away, UX tốt hơn)
+    // Nếu popup bị chặn, fallback sang redirect
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      // auth/popup-blocked hoặc auth/popup-closed-by-user
+      if (error?.code === 'auth/popup-blocked') {
+        console.warn('Popup bị chặn, chuyển sang redirect...');
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        throw error;
+      }
+    }
   };
 
   const signInWithEmail = async (email: string, password: string) => {

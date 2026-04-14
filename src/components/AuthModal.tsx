@@ -29,8 +29,13 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
       await signInWithGoogle();
       onClose();
     } catch (e: any) {
-      console.error('Google Auth Error:', e);
-      setError(`Đăng nhập Google thất bại: ${e?.code || e?.message || 'Lỗi không xác định'}`);
+      // Người dùng tự đóng popup → bỏ qua, không hiện lỗi
+      if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') {
+        // Silently ignore
+      } else {
+        console.error('Google Auth Error:', e);
+        setError(`Đăng nhập Google thất bại: ${e?.code || e?.message || 'Lỗi không xác định'}`);
+      }
     } finally {
       setLoading(false);
     }
