@@ -89,21 +89,26 @@ export default function BrandProfileForm({ userId, brandProfile }: BrandProfileF
     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-            const dataUrl = reader.result as string;
+
+        setExtracting(true);
+        try {
+            const { resizeImageFile } = await import('../../lib/imageUtils');
+            const dataUrl = await resizeImageFile(file, 800, 800);
             set({ logo: dataUrl });
+
             // Auto-extract colors from logo
-            setExtracting(true);
             const extracted = await extractColorsFromImage(dataUrl, profile.brandColors.length);
-            setExtracting(false);
             if (extracted.length > 0) {
                 const newColors = [...profile.brandColors];
                 extracted.forEach((c, i) => { if (i < newColors.length) newColors[i] = c; });
                 set({ logo: dataUrl, brandColors: newColors });
             }
-        };
-        reader.readAsDataURL(file);
+        } catch (error) {
+            console.error('Lỗi khi xử lý logo:', error);
+            alert('Không thể xử lý ảnh, vui lòng thử file nhẹ/nhỏ hơn.');
+        } finally {
+            setExtracting(false);
+        }
     };
 
     const handleExtractColors = async () => {

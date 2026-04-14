@@ -147,3 +147,49 @@ export const applyLogoToImage = async (
         mainImg.src = base64Image;
     });
 };
+
+/**
+ * Resize an image file (e.g. logo) to keep it under max dimensions to save storage size.
+ * Uses WebP format to preserve transparency and optimize size.
+ */
+export const resizeImageFile = async (
+    file: File,
+    maxWidth: number = 800,
+    maxHeight: number = 800
+): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth || height > maxHeight) {
+                    if (width > height) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    } else {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/webp', 0.85));
+                } else {
+                    resolve(event.target?.result as string); // fallback
+                }
+            };
+            img.onerror = (error) => reject(error);
+            img.src = event.target?.result as string;
+        };
+        reader.onerror = (error) => reject(error);
+    });
+};

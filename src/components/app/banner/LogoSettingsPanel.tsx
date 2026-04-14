@@ -13,14 +13,17 @@ export default function LogoSettingsPanel({ settings, onChange, aspectRatio, bra
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                onChange({ ...settings, image: reader.result as string });
-            };
-            reader.readAsDataURL(file);
+            try {
+                const { resizeImageFile } = await import('../../../lib/imageUtils');
+                const dataUrl = await resizeImageFile(file, 800, 800);
+                onChange({ ...settings, image: dataUrl });
+            } catch (err) {
+                console.error('Lỗi khi tải logo:', err);
+                alert('Không thể xử lý ảnh, vui lòng thử file nhẹ/nhỏ hơn.');
+            }
         }
     };
 
